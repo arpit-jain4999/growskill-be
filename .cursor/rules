@@ -1,0 +1,852 @@
+# Cursor Rules for SkillGroww Backend
+
+## Architecture & Code Structure
+
+### 1. Layer Architecture (Controller -> Service -> Repository -> DB)
+- **Controller Layer**: Handle HTTP requests/responses, input validation, route definitions
+  - Controllers should be thin and delegate business logic to services
+  - Use DTOs for request/response validation
+  - Controllers should NOT contain business logic or database queries
+  
+- **Service Layer**: Business logic, orchestration, validation
+  - Services contain all business logic
+  - Services call repositories for data access
+  - Services should be testable and mockable
+  
+- **Repository Layer**: Data access abstraction
+  - Repositories handle all database operations
+  - Use Mongoose models through repositories
+  - Repositories return domain entities
+  
+- **DB Layer**: Database models and schemas
+  - Mongoose schemas define data structure
+  - Keep schemas focused on data representation only
+
+**Example Structure:**
+```
+Controller -> Service -> Repository -> Mongoose Model -> MongoDB
+```
+
+**DO:**
+```typescript
+// Controller
+@Controller('users')
+export class UsersController {
+  constructor(private userService: UserService) {}
+  
+  @Get(':id')
+  async getUser(@Param('id') id: string) {
+    return this.userService.getUserById(id);
+  }
+}
+
+// Service
+@Injectable()
+export class UserService {
+  constructor(private userRepository: UserRepository) {}
+  
+  async getUserById(id: string) {
+    return this.userRepository.findById(id);
+  }
+}
+
+// Repository
+@Injectable()
+export class UserRepository {
+  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  
+  async findById(id: string) {
+    return this.userModel.findById(id);
+  }
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ Business logic in controller
+@Controller('users')
+export class UsersController {
+  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  
+  @Get(':id')
+  async getUser(@Param('id') id: string) {
+    // ❌ Direct DB access in controller
+    return this.userModel.findById(id);
+  }
+}
+```
+
+## SOLID Principles
+
+### **MANDATORY**: All code MUST rigorously follow SOLID principles
+
+### S - Single Responsibility Principle (SRP)
+Each class, module, or function should have only one reason to change.
+
+**DO:**
+```typescript
+// ✅ Single responsibility: Only handles user data access
+@Injectable()
+export class UserRepository {
+  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  
+  async findById(id: string) {
+    return this.userModel.findById(id);
+  }
+  
+  async create(userData: CreateUserDto) {
+    return this.userModel.create(userData);
+  }
+}
+
+// ✅ Single responsibility: Only handles email sending
+@Injectable()
+export class EmailService {
+  async sendOtpEmail(email: string, otp: string) {
+    // Email sending logic
+  }
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ Multiple responsibilities: User management + Email + Logging
+@Injectable()
+export class UserService {
+  async createUser(dto: CreateUserDto) {
+    const user = await this.userModel.create(dto);
+    await this.sendEmail(user.email); // ❌ Email logic mixed in
+    console.log('User created'); // ❌ Logging mixed in
+    return user;
+  }
+}
+```
+
+### O - Open/Closed Principle (OCP)
+Software entities should be open for extension but closed for modification.
+
+**DO:**
+```typescript
+// ✅ Base interface allows extension without modification
+interface PaymentProcessor {
+  processPayment(amount: number): Promise<void>;
+}
+
+@Injectable()
+export class CreditCardProcessor implements PaymentProcessor {
+  async processPayment(amount: number) {
+    // Credit card processing
+  }
+}
+
+@Injectable()
+export class PayPalProcessor implements PaymentProcessor {
+  async processPayment(amount: number) {
+    // PayPal processing
+  }
+}
+
+// ✅ Service uses interface, can extend with new processors without modification
+@Injectable()
+export class PaymentService {
+  constructor(private processor: PaymentProcessor) {}
+  
+  async process(amount: number) {
+    return this.processor.processPayment(amount);
+  }
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ Must modify existing code to add new payment methods
+@Injectable()
+export class PaymentService {
+  async processPayment(type: string, amount: number) {
+    if (type === 'creditcard') {
+      // Credit card logic
+    } else if (type === 'paypal') {
+      // PayPal logic
+    } else if (type === 'stripe') {
+      // ❌ Must modify this class to add new method
+    }
+  }
+}
+```
+
+### L - Liskov Substitution Principle (LSP)
+Objects of a superclass should be replaceable with objects of its subclasses without breaking the application.
+
+**DO:**
+```typescript
+// ✅ Base repository interface
+interface IRepository<T> {
+  findById(id: string): Promise<T | null>;
+  create(data: Partial<T>): Promise<T>;
+}
+
+// ✅ UserRepository implements interface correctly
+@Injectable()
+export class UserRepository implements IRepository<User> {
+  async findById(id: string): Promise<User | null> {
+    return this.userModel.findById(id);
+  }
+  
+  async create(data: Partial<User>): Promise<User> {
+    return this.userModel.create(data);
+  }
+}
+
+// ✅ Can be substituted with any IRepository implementation
+@Injectable()
+export class UserService {
+  constructor(private repository: IRepository<User>) {}
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ Violates LSP: Throws exception instead of returning null
+@Injectable()
+export class UserRepository implements IRepository<User> {
+  async findById(id: string): Promise<User | null> {
+    const user = await this.userModel.findById(id);
+    if (!user) {
+      throw new Error('User not found'); // ❌ Breaks substitution
+    }
+    return user;
+  }
+}
+```
+
+### I - Interface Segregation Principle (ISP)
+Clients should not be forced to depend on interfaces they do not use.
+
+**DO:**
+```typescript
+// ✅ Segregated interfaces
+interface IReadable<T> {
+  findById(id: string): Promise<T | null>;
+  findAll(): Promise<T[]>;
+}
+
+interface IWritable<T> {
+  create(data: Partial<T>): Promise<T>;
+  update(id: string, data: Partial<T>): Promise<T>;
+}
+
+interface IDeletable {
+  delete(id: string): Promise<void>;
+}
+
+// ✅ Classes implement only what they need
+@Injectable()
+export class ReadOnlyUserRepository implements IReadable<User> {
+  async findById(id: string) { /* ... */ }
+  async findAll() { /* ... */ }
+}
+
+@Injectable()
+export class UserRepository implements IReadable<User>, IWritable<User>, IDeletable {
+  // Implements all methods
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ Fat interface forces implementation of unused methods
+interface IRepository<T> {
+  findById(id: string): Promise<T | null>;
+  create(data: Partial<T>): Promise<T>;
+  update(id: string, data: Partial<T>): Promise<T>;
+  delete(id: string): Promise<void>;
+  sendEmail(email: string): Promise<void>; // ❌ Not related to repository
+  generateReport(): Promise<Report>; // ❌ Not related to repository
+}
+
+// ❌ Must implement all methods even if not needed
+@Injectable()
+export class ReadOnlyUserRepository implements IRepository<User> {
+  async findById(id: string) { /* ... */ }
+  async create() { throw new Error('Not supported'); } // ❌ Forced to implement
+  async update() { throw new Error('Not supported'); } // ❌ Forced to implement
+}
+```
+
+### D - Dependency Inversion Principle (DIP)
+High-level modules should not depend on low-level modules. Both should depend on abstractions.
+
+**DO:**
+```typescript
+// ✅ Abstractions (interfaces)
+interface IUserRepository {
+  findById(id: string): Promise<User | null>;
+}
+
+interface ILogger {
+  log(message: string): void;
+}
+
+// ✅ High-level module depends on abstraction
+@Injectable()
+export class UserService {
+  constructor(
+    private userRepository: IUserRepository, // ✅ Depends on abstraction
+    private logger: ILogger, // ✅ Depends on abstraction
+  ) {}
+  
+  async getUserById(id: string) {
+    this.logger.log(`Fetching user: ${id}`);
+    return this.userRepository.findById(id);
+  }
+}
+
+// ✅ Low-level modules implement abstractions
+@Injectable()
+export class UserRepository implements IUserRepository {
+  async findById(id: string) {
+    // Implementation
+  }
+}
+
+@Injectable()
+export class LoggerService implements ILogger {
+  log(message: string) {
+    // Implementation
+  }
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ High-level module depends on concrete implementation
+@Injectable()
+export class UserService {
+  constructor(
+    private userRepository: UserRepository, // ❌ Depends on concrete class
+    private logger: LoggerService, // ❌ Depends on concrete class
+  ) {}
+}
+
+// ❌ Cannot easily swap implementations or test
+```
+
+### SOLID Principles Checklist
+
+When writing code, ensure:
+- [ ] **SRP**: Each class has a single, well-defined responsibility
+- [ ] **OCP**: New features added through extension, not modification
+- [ ] **LSP**: Subtypes are fully substitutable for their base types
+- [ ] **ISP**: Interfaces are small and focused, not fat
+- [ ] **DIP**: Depend on abstractions (interfaces), not concrete implementations
+- [ ] Use dependency injection for all dependencies
+- [ ] Create interfaces for external dependencies (repositories, services, etc.)
+- [ ] Avoid tight coupling between modules
+- [ ] Make code testable through abstractions
+
+## Testing Requirements
+
+### 2. Test Cases for Service Methods
+- **MANDATORY**: Every new service method MUST have a corresponding test case
+- Test files should be co-located with source files: `*.service.spec.ts`
+- Use Jest for testing
+- Test coverage should include:
+  - Happy path scenarios
+  - Error cases
+  - Edge cases
+  - Input validation
+
+**Example:**
+```typescript
+// user.service.ts
+@Injectable()
+export class UserService {
+  async createUser(dto: CreateUserDto) {
+    // implementation
+  }
+}
+
+// user.service.spec.ts
+describe('UserService', () => {
+  describe('createUser', () => {
+    it('should create a user successfully', async () => {
+      // test implementation
+    });
+    
+    it('should throw error when user already exists', async () => {
+      // test implementation
+    });
+  });
+});
+```
+
+## Code Changes
+
+### 3. No Unnecessary Changes
+- **DO NOT** modify files that are not directly related to the current task
+- **DO NOT** reformat code unless explicitly requested
+- **DO NOT** change existing working code without a clear requirement
+- Only modify files that are necessary for the current feature/fix
+- Preserve existing code style and patterns
+- When in doubt, ask before making changes
+
+## Authentication
+
+### 4. JWT Verification Decorator
+- **MANDATORY**: All authenticated APIs MUST use `@UseGuards(JwtAuthGuard)` and `@CurrentUser()` decorator
+- Use the centralized JWT guard from `src/common/guards/jwt-auth.guard.ts`
+- Extract user information using `@CurrentUser()` decorator from `src/common/decorators/current-user.decorator.ts`
+- Public endpoints should use `@Public()` decorator
+
+**DO:**
+```typescript
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser, CurrentUserPayload } from '../common/decorators/current-user.decorator';
+
+@Controller('users')
+export class UsersController {
+  @UseGuards(JwtAuthGuard)
+  @Get('profile')
+  getProfile(@CurrentUser() user: CurrentUserPayload) {
+    return { success: true, data: { user } };
+  }
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ Using @Request() directly
+@UseGuards(AuthGuard('jwt'))
+@Get('profile')
+getProfile(@Request() req: any) {
+  return { user: req.user };
+}
+
+// ❌ No guard at all
+@Get('profile')
+getProfile() {
+  return { user: {} };
+}
+```
+
+## User Data Access from JWT Token
+
+### **MANDATORY**: User identification data MUST be extracted from JWT token, NOT from request parameters
+
+### Core Principle
+- **User identification data** (userId, id, firstName, lastName, email, phoneNumber, countryCode, etc.) MUST be extracted from the JWT token via `@CurrentUser()` decorator
+- **NEVER** accept user identification data as request parameters (path params, query params, or body)
+- This applies to ALL user-related operations: fetching user details, updating user, deleting user, etc.
+- The only exception is when explicitly required for admin operations or cross-user operations (which should be clearly documented)
+
+### User Identification Fields
+The following fields should ALWAYS come from JWT token:
+- `userId` / `id`
+- `firstName`
+- `lastName`
+- `email`
+- `phoneNumber`
+- `countryCode`
+- Any other user-specific identification data
+
+### Rules for User Operations
+
+#### 1. Fetching User Details
+**DO:**
+```typescript
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser, CurrentUserPayload } from '../common/decorators/current-user.decorator';
+
+@Controller('users')
+export class UsersController {
+  constructor(private userService: UserService) {}
+
+  @UseGuards(JwtAuthGuard)
+  @Get('profile')
+  async getProfile(@CurrentUser() user: CurrentUserPayload) {
+    // ✅ userId comes from JWT token, not from request
+    return this.userService.getUserProfile(user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async getCurrentUser(@CurrentUser() user: CurrentUserPayload) {
+    // ✅ All user data from JWT token
+    return {
+      success: true,
+      data: {
+        user: {
+          id: user.userId,
+          countryCode: user.countryCode,
+          phoneNumber: user.phoneNumber,
+        }
+      }
+    };
+  }
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ userId as path parameter
+@Get(':userId')
+async getUser(@Param('userId') userId: string) {
+  return this.userService.getUserById(userId);
+}
+
+// ❌ userId as query parameter
+@Get('profile')
+async getProfile(@Query('userId') userId: string) {
+  return this.userService.getUserById(userId);
+}
+
+// ❌ userId in request body
+@Post('profile')
+async getProfile(@Body() dto: { userId: string }) {
+  return this.userService.getUserById(dto.userId);
+}
+```
+
+#### 2. Updating User Details
+**DO:**
+```typescript
+@UseGuards(JwtAuthGuard)
+@Put('profile')
+async updateProfile(
+  @CurrentUser() user: CurrentUserPayload,
+  @Body() updateDto: UpdateUserDto, // ✅ Only contains updatable fields, NOT userId
+) {
+  // ✅ userId comes from JWT token
+  return this.userService.updateUser(user.userId, updateDto);
+}
+
+// UpdateUserDto should NOT contain userId
+export class UpdateUserDto {
+  @IsString()
+  @IsOptional()
+  firstName?: string;
+
+  @IsString()
+  @IsOptional()
+  lastName?: string;
+
+  // ❌ NO userId field here
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ userId in path parameter
+@Put(':userId')
+async updateUser(
+  @Param('userId') userId: string,
+  @Body() updateDto: UpdateUserDto,
+) {
+  return this.userService.updateUser(userId, updateDto);
+}
+
+// ❌ userId in body
+export class UpdateUserDto {
+  @IsString()
+  userId: string; // ❌ NEVER include userId in DTOs
+
+  @IsString()
+  firstName?: string;
+}
+
+@Put('profile')
+async updateProfile(@Body() updateDto: UpdateUserDto) {
+  return this.userService.updateUser(updateDto.userId, updateDto); // ❌
+}
+```
+
+#### 3. Service Layer Implementation
+**DO:**
+```typescript
+@Injectable()
+export class UserService {
+  constructor(
+    private userRepository: UserRepository,
+    private logger: LoggerService,
+  ) {
+    this.logger.setContext('UserService');
+  }
+
+  async getUserProfile(userId: string) {
+    // ✅ userId passed from controller (extracted from JWT)
+    this.logger.log(`Fetching profile for user: ${userId}`);
+    return this.userRepository.findById(userId);
+  }
+
+  async updateUser(userId: string, updateDto: UpdateUserDto) {
+    // ✅ userId passed from controller (extracted from JWT)
+    this.logger.log(`Updating user: ${userId}`);
+    return this.userRepository.update(userId, updateDto);
+  }
+}
+```
+
+**DON'T:**
+```typescript
+@Injectable()
+export class UserService {
+  async getUserProfile(dto: { userId: string }) {
+    // ❌ Accepting userId in DTO
+    return this.userRepository.findById(dto.userId);
+  }
+
+  async updateUser(updateDto: UpdateUserDto & { userId: string }) {
+    // ❌ Accepting userId in DTO
+    return this.userRepository.update(updateDto.userId, updateDto);
+  }
+}
+```
+
+#### 4. Repository Layer
+**DO:**
+```typescript
+@Injectable()
+export class UserRepository {
+  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+
+  async findById(id: string) {
+    return this.userModel.findById(id);
+  }
+
+  async update(id: string, updateData: Partial<User>) {
+    return this.userModel.findByIdAndUpdate(id, updateData, { new: true });
+  }
+}
+```
+
+### Exception Cases (Must be Explicitly Documented)
+The following are the ONLY exceptions where user identification might come from parameters:
+
+1. **Admin Operations**: Admin accessing other users' data
+   ```typescript
+   @UseGuards(JwtAuthGuard, AdminGuard)
+   @Get(':userId')
+   async getUserAsAdmin(
+     @CurrentUser() admin: CurrentUserPayload,
+     @Param('userId') userId: string, // ✅ Allowed for admin
+   ) {
+     // Must verify admin has permission
+     return this.userService.getUserById(userId);
+   }
+   ```
+
+2. **Public User Lookup**: When looking up users by public identifier (e.g., username)
+   ```typescript
+   @Get('by-username/:username')
+   async getUserByUsername(@Param('username') username: string) {
+     // ✅ Public lookup, not user's own data
+     return this.userService.findByUsername(username);
+   }
+   ```
+
+### Security Benefits
+- Prevents user impersonation attacks
+- Ensures users can only access/modify their own data
+- Reduces risk of IDOR (Insecure Direct Object Reference) vulnerabilities
+- Centralizes user identification logic
+- Makes authorization checks explicit
+
+### Checklist for User Operations
+Before implementing any user-related endpoint, verify:
+- [ ] User identification comes from `@CurrentUser()` decorator
+- [ ] No userId/id in path parameters for user's own data
+- [ ] No userId/id in query parameters for user's own data
+- [ ] No userId/id in request body DTOs for user's own data
+- [ ] Service methods accept userId as separate parameter (from JWT)
+- [ ] DTOs do NOT contain user identification fields
+- [ ] Exception cases (admin/public lookup) are explicitly documented
+- [ ] Authorization checks are in place
+
+## Logging
+
+### 5. Central Logger Service
+- **MANDATORY**: Use `LoggerService` from `src/common/services/logger.service.ts`
+- Set context for each service/controller
+- Use appropriate log levels:
+  - `log()`: General information
+  - `error()`: Errors and exceptions
+  - `warn()`: Warnings
+  - `debug()`: Debug information (development only)
+- DO NOT use `console.log()`, `console.error()`, etc.
+
+**DO:**
+```typescript
+import { LoggerService } from '../common/services/logger.service';
+
+@Injectable()
+export class UserService {
+  constructor(
+    private userRepository: UserRepository,
+    private logger: LoggerService,
+  ) {
+    this.logger.setContext('UserService');
+  }
+  
+  async createUser(dto: CreateUserDto) {
+    this.logger.log(`Creating user: ${dto.email}`);
+    try {
+      const user = await this.userRepository.create(dto);
+      this.logger.log(`User created successfully: ${user.id}`);
+      return user;
+    } catch (error) {
+      this.logger.error(`Failed to create user: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ Using console.log
+console.log('Creating user');
+console.error('Error:', error);
+
+// ❌ No context set
+this.logger.log('Message');
+```
+
+## Response Format
+
+### 6. Response Interceptor (Automatic Formatting)
+- **MANDATORY**: Response formatting is handled automatically by `TransformResponseInterceptor`
+- Controllers and services should return ONLY the data, NOT the wrapper format
+- The interceptor automatically wraps all responses in `{success: true, data: {...}}`
+- DO NOT manually wrap responses in controllers or services
+- The interceptor is registered globally in `main.ts`
+
+### 7. Standard Response Format
+- **MANDATORY**: All API responses MUST follow this structure:
+```typescript
+{
+  success: boolean,
+  data: {} | [] | null
+}
+```
+
+- **Success Response:** (automatically formatted by interceptor)
+```typescript
+{
+  success: true,
+  data: {
+    // response data here
+  }
+}
+```
+
+- **Error Response:** (handled by exception filter)
+```typescript
+{
+  success: false,
+  error: {
+    message: string,
+    statusCode: number,
+    timestamp: string,
+    path: string
+  }
+}
+```
+
+**DO:**
+```typescript
+// ✅ Controller returns only data - interceptor wraps it
+@Get('users')
+async getUsers() {
+  const users = await this.userService.findAll();
+  return { users }; // Interceptor wraps in {success: true, data: {users}}
+}
+
+@Post('users')
+async createUser(@Body() dto: CreateUserDto) {
+  const user = await this.userService.create(dto);
+  return { user }; // Interceptor wraps in {success: true, data: {user}}
+}
+
+@UseGuards(JwtAuthGuard)
+@Get('profile')
+async getProfile(@CurrentUser() user: CurrentUserPayload) {
+  return { user }; // Interceptor wraps in {success: true, data: {user}}
+}
+```
+
+**DON'T:**
+```typescript
+// ❌ Manual wrapping in controller
+@Get('users')
+async getUsers() {
+  const users = await this.userService.findAll();
+  return {
+    success: true, // ❌ Interceptor handles this
+    data: { users } // ❌ Interceptor handles this
+  };
+}
+
+// ❌ Manual wrapping in service
+async findAll() {
+  const users = await this.repository.findAll();
+  return {
+    success: true, // ❌ Interceptor handles this
+    data: { users } // ❌ Interceptor handles this
+  };
+}
+
+// ❌ Returning raw data without object
+@Get('users')
+async getUsers() {
+  return await this.userService.findAll(); // ✅ This is fine, interceptor wraps it
+}
+```
+
+## Additional Best Practices
+
+### Error Handling
+- Use NestJS built-in exceptions: `BadRequestException`, `UnauthorizedException`, `NotFoundException`, etc.
+- Let the global exception filter handle response formatting
+- Always log errors using LoggerService
+
+### Validation
+- Use class-validator decorators in DTOs
+- Enable global validation pipe with `whitelist: true` and `forbidNonWhitelisted: true`
+- Validate all inputs at the controller level
+
+### Code Organization
+- Keep files focused and single-responsibility
+- Use meaningful names for classes, methods, and variables
+- Group related functionality in modules
+- Export common utilities through `src/common/index.ts`
+
+### Type Safety
+- Use TypeScript types and interfaces
+- Avoid `any` type - use proper types or `unknown`
+- Define interfaces for DTOs, responses, and entities
+
+### Documentation
+- Add JSDoc comments for public methods
+- Document complex business logic
+- Keep README files updated
+
+## Summary Checklist
+
+Before submitting code, ensure:
+- [ ] **SOLID Principles**: All code follows SRP, OCP, LSP, ISP, and DIP rigorously
+- [ ] Follows Controller -> Service -> Repository -> DB architecture
+- [ ] Test cases written for new service methods
+- [ ] No unnecessary changes to unrelated files
+- [ ] JWT verification using `@UseGuards(JwtAuthGuard)` and `@CurrentUser()`
+- [ ] **User data from JWT**: User identification (userId, firstName, lastName, etc.) extracted from JWT token, NOT from request parameters
+- [ ] **No userId in params**: User operations do NOT accept userId as path/query/body parameter (except admin operations)
+- [ ] LoggerService used instead of console.log
+- [ ] **Response formatting**: Controllers return only data, NOT wrapped in `{success, data}` format (interceptor handles it)
+- [ ] Response format follows `{success: boolean, data: {}}` (enforced by interceptor)
+- [ ] Error handling uses NestJS exceptions
+- [ ] Input validation with DTOs
+- [ ] Type safety maintained
+- [ ] Dependencies injected through constructor
+- [ ] Interfaces used for abstractions
+- [ ] Classes have single responsibility
+
