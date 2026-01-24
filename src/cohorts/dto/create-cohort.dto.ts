@@ -50,10 +50,5 @@ export class CreateCohortDto {
   @IsDateString()
   @IsOptional()
   endDate?: Date;
-
-  @ApiPropertyOptional({ example: 100, description: 'Maximum participants' })
-  @IsNumber()
-  @IsOptional()
-  maxParticipants?: number;
 }
 

@@ -39,12 +39,6 @@ export class Cohort {
 
   @Prop({ default: true })
   isActive: boolean;
-
-  @Prop()
-  maxParticipants?: number;
-
-  @Prop({ default: 0 })
-  currentParticipants: number;
 }
 
 export const CohortSchema = SchemaFactory.createForClass(Cohort);

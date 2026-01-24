@@ -1,8 +1,10 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiNotFoundResponse, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiForbiddenResponse, ApiParam, ApiBearerAuth, ApiCreatedResponse, ApiConflictResponse } from '@nestjs/swagger';
 import { CohortsService } from './cohorts.service';
 import { CreateCohortDto } from './dto/create-cohort.dto';
 import { UpdateCohortDto } from './dto/update-cohort.dto';
+import { CohortResponseDto } from './dto/cohort-response.dto';
+import { StandardErrorResponseDto } from '../common/dto/error-response.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -20,9 +22,18 @@ export class AdminCohortsController {
    */
   @Get('cohorts')
   @ApiOperation({ summary: '[Admin] Get all cohorts', description: 'Get list of all cohorts including inactive ones. Admin only.' })
-  @ApiResponse({ status: 200, description: 'List of all cohorts' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiOkResponse({ 
+    description: 'List of all cohorts',
+    type: [CohortResponseDto],
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Unauthorized - Invalid or missing JWT token',
+    type: StandardErrorResponseDto,
+  })
+  @ApiForbiddenResponse({ 
+    description: 'Forbidden - Admin role required',
+    type: StandardErrorResponseDto,
+  })
   async findAllForAdmin() {
     return this.cohortsService.findAllForAdmin();
   }
@@ -33,10 +44,22 @@ export class AdminCohortsController {
   @Get('cohorts/:id')
   @ApiOperation({ summary: '[Admin] Get cohort by ID', description: 'Get single cohort by ID including inactive. Admin only.' })
   @ApiParam({ name: 'id', description: 'Cohort ID' })
-  @ApiResponse({ status: 200, description: 'Cohort found' })
-  @ApiResponse({ status: 404, description: 'Cohort not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiOkResponse({ 
+    description: 'Cohort found',
+    type: CohortResponseDto,
+  })
+  @ApiNotFoundResponse({ 
+    description: 'Cohort not found',
+    type: StandardErrorResponseDto,
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Unauthorized - Invalid or missing JWT token',
+    type: StandardErrorResponseDto,
+  })
+  @ApiForbiddenResponse({ 
+    description: 'Forbidden - Admin role required',
+    type: StandardErrorResponseDto,
+  })
   async findOneForAdmin(@Param('id') id: string) {
     return this.cohortsService.findByIdForAdmin(id);
   }
@@ -46,10 +69,22 @@ export class AdminCohortsController {
    */
   @Post('cohort')
   @ApiOperation({ summary: '[Admin] Create cohort', description: 'Create a new cohort. Admin only.' })
-  @ApiResponse({ status: 201, description: 'Cohort created successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiCreatedResponse({ 
+    description: 'Cohort created successfully',
+    type: CohortResponseDto,
+  })
+  @ApiBadRequestResponse({ 
+    description: 'Bad request - Invalid input data',
+    type: StandardErrorResponseDto,
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Unauthorized - Invalid or missing JWT token',
+    type: StandardErrorResponseDto,
+  })
+  @ApiForbiddenResponse({ 
+    description: 'Forbidden - Admin role required',
+    type: StandardErrorResponseDto,
+  })
   async create(@Body() createCohortDto: CreateCohortDto) {
     return this.cohortsService.create(createCohortDto);
   }
@@ -60,11 +95,26 @@ export class AdminCohortsController {
   @Patch('cohort/:id')
   @ApiOperation({ summary: '[Admin] Update cohort', description: 'Update an existing cohort. Admin only.' })
   @ApiParam({ name: 'id', description: 'Cohort ID' })
-  @ApiResponse({ status: 200, description: 'Cohort updated successfully' })
-  @ApiResponse({ status: 404, description: 'Cohort not found' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiOkResponse({ 
+    description: 'Cohort updated successfully',
+    type: CohortResponseDto,
+  })
+  @ApiNotFoundResponse({ 
+    description: 'Cohort not found',
+    type: StandardErrorResponseDto,
+  })
+  @ApiBadRequestResponse({ 
+    description: 'Bad request - Invalid input data',
+    type: StandardErrorResponseDto,
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Unauthorized - Invalid or missing JWT token',
+    type: StandardErrorResponseDto,
+  })
+  @ApiForbiddenResponse({ 
+    description: 'Forbidden - Admin role required',
+    type: StandardErrorResponseDto,
+  })
   async update(@Param('id') id: string, @Body() updateCohortDto: UpdateCohortDto) {
     return this.cohortsService.update(id, updateCohortDto);
   }
@@ -75,11 +125,26 @@ export class AdminCohortsController {
   @Delete('cohort/:id')
   @ApiOperation({ summary: '[Admin] Soft delete cohort', description: 'Soft delete cohort by setting isActive to false. Admin only.' })
   @ApiParam({ name: 'id', description: 'Cohort ID' })
-  @ApiResponse({ status: 200, description: 'Cohort deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Cohort not found' })
-  @ApiResponse({ status: 409, description: 'Cohort already inactive' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiOkResponse({ 
+    description: 'Cohort deleted successfully',
+    type: CohortResponseDto,
+  })
+  @ApiNotFoundResponse({ 
+    description: 'Cohort not found',
+    type: StandardErrorResponseDto,
+  })
+  @ApiConflictResponse({ 
+    description: 'Cohort already inactive',
+    type: StandardErrorResponseDto,
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Unauthorized - Invalid or missing JWT token',
+    type: StandardErrorResponseDto,
+  })
+  @ApiForbiddenResponse({ 
+    description: 'Forbidden - Admin role required',
+    type: StandardErrorResponseDto,
+  })
   async remove(@Param('id') id: string) {
     return this.cohortsService.remove(id);
   }

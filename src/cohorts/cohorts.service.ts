@@ -73,7 +73,6 @@ export class CohortsService {
       displayOrder: createCohortDto.displayOrder ?? 0,
       isVisibleOnHomePage: createCohortDto.isVisibleOnHomePage ?? false,
       isActive: true,
-      currentParticipants: 0,
     };
 
     const cohort = await this.cohortRepository.create(cohortData);

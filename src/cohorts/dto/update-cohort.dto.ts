@@ -55,15 +55,5 @@ export class UpdateCohortDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
-
-  @ApiPropertyOptional({ example: 150, description: 'Maximum participants' })
-  @IsNumber()
-  @IsOptional()
-  maxParticipants?: number;
-
-  @ApiPropertyOptional({ example: 50, description: 'Current participants' })
-  @IsNumber()
-  @IsOptional()
-  currentParticipants?: number;
 }
 
