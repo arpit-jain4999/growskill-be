@@ -1,0 +1,32 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.CohortsModule = void 0;
+const common_1 = require("@nestjs/common");
+const mongoose_1 = require("@nestjs/mongoose");
+const cohorts_controller_1 = require("./cohorts.controller");
+const admin_cohorts_controller_1 = require("./admin-cohorts.controller");
+const cohorts_service_1 = require("./cohorts.service");
+const cohort_repository_1 = require("./repositories/cohort.repository");
+const cohort_schema_1 = require("./schemas/cohort.schema");
+const organizations_module_1 = require("../organizations/organizations.module");
+let CohortsModule = class CohortsModule {
+};
+exports.CohortsModule = CohortsModule;
+exports.CohortsModule = CohortsModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            mongoose_1.MongooseModule.forFeature([{ name: cohort_schema_1.Cohort.name, schema: cohort_schema_1.CohortSchema }]),
+            organizations_module_1.OrganizationsModule,
+        ],
+        controllers: [cohorts_controller_1.CohortsController, admin_cohorts_controller_1.AdminCohortsController],
+        providers: [cohorts_service_1.CohortsService, cohort_repository_1.CohortRepository],
+        exports: [cohorts_service_1.CohortsService],
+    })
+], CohortsModule);
+//# sourceMappingURL=cohorts.module.js.map

@@ -1,0 +1,37 @@
+export declare const PERMISSIONS: {
+    readonly ORG_READ: "org:read";
+    readonly ORG_UPDATE: "org:update";
+    readonly USER_CREATE: "user:create";
+    readonly USER_READ: "user:read";
+    readonly USER_UPDATE: "user:update";
+    readonly USER_DELETE: "user:delete";
+    readonly USER_ASSIGN_ROLE_ADMIN: "user:assign_role_admin";
+    readonly PERMISSION_GRANT: "permission:grant";
+    readonly MODULE_CREATE: "module:create";
+    readonly MODULE_READ: "module:read";
+    readonly MODULE_UPDATE: "module:update";
+    readonly MODULE_DELETE: "module:delete";
+    readonly CHAPTER_CREATE: "chapter:create";
+    readonly CHAPTER_READ: "chapter:read";
+    readonly CHAPTER_UPDATE: "chapter:update";
+    readonly CHAPTER_DELETE: "chapter:delete";
+    readonly COURSE_CREATE: "course:create";
+    readonly COURSE_READ: "course:read";
+    readonly COURSE_UPDATE: "course:update";
+    readonly COURSE_DELETE: "course:delete";
+    readonly COHORT_CREATE: "cohort:create";
+    readonly COHORT_READ: "cohort:read";
+    readonly COHORT_UPDATE: "cohort:update";
+    readonly COHORT_DELETE: "cohort:delete";
+};
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+export declare const ALL_PERMISSIONS: string[];
+export declare const MODULE_KEYS: {
+    readonly COURSES: "courses";
+    readonly COHORTS: "cohorts";
+    readonly MODULES: "modules";
+    readonly CHAPTERS: "chapters";
+    readonly ASSESSMENTS: "assessments";
+};
+export declare const MODULE_PERMISSIONS: Record<string, string[]>;
+export declare const MODULE_READ_PERMISSION: Record<string, string>;
