@@ -4,18 +4,38 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { User, UserDocument } from './schemas/user.schema';
 import { RequestOtpDto, VerifyOtpDto } from './dto/auth.dto';
 import { OtpService } from './otp.service';
 import { LoggerService } from '../common/services/logger.service';
+import {
+  Organization,
+  OrganizationDocument,
+} from '../organizations/schemas/organization.schema';
+import {
+  normalizeCountryCode,
+  normalizePhoneNumber,
+  countryCodeQueryVariants,
+} from '../common/helpers/phone';
+import { ROLES } from '../common/constants/roles';
+
+/** Role priority for picking one user when multiple match same org+phone (higher = prefer). */
+const ROLE_PRIORITY: Record<string, number> = {
+  [ROLES.PLATFORM_OWNER]: 4,
+  [ROLES.SUPER_ADMIN]: 3,
+  [ROLES.ADMIN]: 2,
+  [ROLES.USER]: 1,
+};
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Organization.name)
+    private organizationModel: Model<OrganizationDocument>,
     private jwtService: JwtService,
     private configService: ConfigService,
     private otpService: OtpService,
@@ -25,93 +45,160 @@ export class AuthService {
   }
 
   /**
-   * Unified request OTP - works for both new and existing users
+   * Resolve user lookup filter by optional organizationId.
+   * Matches both "91" and "+91" in DB via $in so we find the same user regardless of how frontend sends it.
    */
-  async requestOtp(requestOtpDto: RequestOtpDto) {
-    const { countryCode, phoneNumber } = requestOtpDto;
-
-    // Check if user exists
-    const existingUser = await this.userModel.findOne({
-      countryCode,
-      phoneNumber,
-    });
-
-    const isNewUser = !existingUser;
-
-    // Generate and send OTP (returns existing if still valid)
-    await this.otpService.createOtp(countryCode, phoneNumber);
-
-    // Return only data - interceptor will wrap in {success: true, data: {...}}
-    return {
-      isNewUser,
+  private userFindFilter(
+    countryCode: string,
+    phoneNumber: string,
+    organizationId?: string | null,
+  ) {
+    const normalizedCountry = normalizeCountryCode(countryCode);
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    const base: Record<string, unknown> = {
+      countryCode: { $in: countryCodeQueryVariants(normalizedCountry) },
+      phoneNumber: normalizedPhone,
     };
+    if (organizationId?.trim()) {
+      base.organizationId = new Types.ObjectId(organizationId.trim());
+    } else {
+      base.$or = [
+        { organizationId: null },
+        { organizationId: { $exists: false } },
+      ];
+    }
+    return base;
   }
 
   /**
-   * Resend OTP - returns same OTP if still valid, otherwise generates new one
+   * Find one user by phone/org; when multiple match (e.g. same number stored as "91" and "+91"), prefer SUPER_ADMIN > ADMIN > USER.
    */
-  async resendOtp(requestOtpDto: RequestOtpDto) {
-    const { countryCode, phoneNumber } = requestOtpDto;
-
-    // Check if user exists
-    const existingUser = await this.userModel.findOne({
-      countryCode,
-      phoneNumber,
-    });
-
-    const isNewUser = !existingUser;
-
-    // Create OTP (will return existing if still valid within 5 minutes)
-    await this.otpService.createOtp(countryCode, phoneNumber);
-
-    // Return only data - interceptor will wrap in {success: true, data: {...}}
-    return {
-      isNewUser,
-      message: 'OTP sent successfully',
-    };
+  private async findOneUserByPhone(
+    countryCode: string,
+    phoneNumber: string,
+    organizationId?: string | null,
+  ): Promise<UserDocument | null> {
+    const filter = this.userFindFilter(countryCode, phoneNumber, organizationId);
+    const users = await this.userModel.find(filter).exec();
+    if (users.length === 0) return null;
+    if (users.length === 1) return users[0];
+    users.sort((a, b) => (ROLE_PRIORITY[b.role ?? 'USER'] ?? 0) - (ROLE_PRIORITY[a.role ?? 'USER'] ?? 0));
+    return users[0];
   }
 
   /**
-   * Unified verify OTP - works for both sign up and login
+   * Validate organization exists when organizationId is provided.
    */
-  async verifyOtp(verifyOtpDto: VerifyOtpDto) {
+  private async validateOrganizationId(
+    organizationId: string | null | undefined,
+  ): Promise<void> {
+    if (!organizationId?.trim()) return;
+    const org = await this.organizationModel.findById(
+      new Types.ObjectId(organizationId.trim()),
+    );
+    if (!org) {
+      throw new BadRequestException('Invalid or unknown organization ID');
+    }
+  }
+
+  /**
+   * Unified request OTP - works for both new and existing users.
+   * Optional header x-org-id: when present, user is scoped to that organisation.
+   */
+  async requestOtp(
+    requestOtpDto: RequestOtpDto,
+    organizationId?: string | null,
+  ) {
+    const { countryCode, phoneNumber } = requestOtpDto;
+    await this.validateOrganizationId(organizationId);
+
+    const existingUser = await this.findOneUserByPhone(countryCode, phoneNumber, organizationId);
+    const isNewUser = !existingUser;
+
+    const normalizedCountry = normalizeCountryCode(countryCode);
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    await this.otpService.createOtp(normalizedCountry, normalizedPhone);
+
+    return { isNewUser };
+  }
+
+  /**
+   * Resend OTP - returns same OTP if still valid, otherwise generates new one.
+   * Optional header x-org-id: when present, user is scoped to that organisation.
+   */
+  async resendOtp(
+    requestOtpDto: RequestOtpDto,
+    organizationId?: string | null,
+  ) {
+    const { countryCode, phoneNumber } = requestOtpDto;
+    await this.validateOrganizationId(organizationId);
+
+    const existingUser = await this.findOneUserByPhone(countryCode, phoneNumber, organizationId);
+    const isNewUser = !existingUser;
+
+    const normalizedCountry = normalizeCountryCode(countryCode);
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    await this.otpService.createOtp(normalizedCountry, normalizedPhone);
+
+    return { isNewUser, message: 'OTP sent successfully' };
+  }
+
+  /**
+   * Unified verify OTP - works for both sign up and login.
+   * Optional header x-org-id: when present, user is created/found in that organisation.
+   */
+  async verifyOtp(
+    verifyOtpDto: VerifyOtpDto,
+    organizationId?: string | null,
+  ) {
     const { countryCode, phoneNumber, otp, name } = verifyOtpDto;
+    await this.validateOrganizationId(organizationId);
 
-    // Verify OTP
+    const normalizedCountry = normalizeCountryCode(countryCode);
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
     const isValidOtp = await this.otpService.verifyOtp(
-      countryCode,
-      phoneNumber,
+      normalizedCountry,
+      normalizedPhone,
       otp,
     );
     if (!isValidOtp) {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
-    // Find or create user
-    let user = await this.userModel.findOne({ countryCode, phoneNumber });
+    let user = await this.findOneUserByPhone(countryCode, phoneNumber, organizationId);
 
     if (!user) {
-      // New user - create account
-      user = await this.userModel.create({
-        countryCode,
-        phoneNumber,
+      const createPayload: Record<string, unknown> = {
+        countryCode: normalizedCountry,
+        phoneNumber: normalizedPhone,
         name,
         isVerified: true,
-      });
+        role: 'USER',
+      };
+      if (organizationId?.trim()) {
+        createPayload.organizationId = new Types.ObjectId(
+          organizationId.trim(),
+        );
+      }
+      user = await this.userModel.create(createPayload);
     } else {
-      // Existing user - update verification status
       user.isVerified = true;
       if (name && !user.name) {
         user.name = name;
       }
+      // Normalize stored values so DB converges to single format
+      user.countryCode = normalizedCountry;
+      user.phoneNumber = normalizedPhone;
       await user.save();
     }
 
-    // Generate tokens
+    // Generate tokens (include role and org so clients can use without calling profile)
     const payload = {
+      sub: user._id.toString(),
       countryCode: user.countryCode,
       phoneNumber: user.phoneNumber,
-      sub: user._id,
+      role: user.role ?? 'USER',
+      organizationId: user.organizationId?.toString() ?? null,
     };
 
     const accessToken = this.jwtService.sign(payload);
@@ -136,7 +223,29 @@ export class AuthService {
         phoneNumber: user.phoneNumber,
         name: user.name,
         isVerified: user.isVerified,
+        role: user.role ?? 'USER',
+        organizationId: user.organizationId?.toString() ?? null,
       },
+    };
+  }
+
+  /**
+   * Get current user profile from DB (role, name, email, etc.) so clients always see up-to-date role.
+   */
+  async getProfile(userId: string) {
+    const user = await this.userModel.findById(userId).lean();
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    return {
+      id: user._id.toString(),
+      countryCode: user.countryCode,
+      phoneNumber: user.phoneNumber,
+      name: user.name,
+      email: user.email,
+      role: user.role ?? 'USER',
+      organizationId: user.organizationId?.toString() ?? null,
+      isVerified: user.isVerified,
     };
   }
 

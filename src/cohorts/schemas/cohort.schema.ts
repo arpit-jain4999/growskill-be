@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 import { FileInfo, FileInfoSchema } from '../../common/schemas/file.schema';
 
 export type CohortDocument = Cohort & Document;
@@ -10,6 +10,9 @@ export type CohortDocument = Cohort & Document;
 // - updatedAt: Date (added by timestamps: true)
 @Schema({ timestamps: true })
 export class Cohort {
+  @Prop({ type: Types.ObjectId, ref: 'Organization', required: true })
+  organizationId: Types.ObjectId;
+
   @Prop({ required: true })
   name: string;
 
@@ -42,4 +45,5 @@ export class Cohort {
 }
 
 export const CohortSchema = SchemaFactory.createForClass(Cohort);
+CohortSchema.index({ organizationId: 1 });
 

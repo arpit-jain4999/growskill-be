@@ -16,6 +16,9 @@ export enum OrderStatus {
 // - updatedAt: Date (added by timestamps: true)
 @Schema({ timestamps: true })
 export class Order {
+  @Prop({ type: Types.ObjectId, ref: 'Organization', required: true })
+  organizationId: Types.ObjectId;
+
   @Prop({ required: true, type: Types.ObjectId })
   userId: Types.ObjectId;
 
@@ -43,5 +46,6 @@ export class Order {
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
 
+OrderSchema.index({ organizationId: 1 });
 OrderSchema.index({ userId: 1, createdAt: -1 });
 

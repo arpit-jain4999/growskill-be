@@ -2,7 +2,7 @@ import { Controller, Get, Param } from '@nestjs/common';
 import { PreferencesService } from './preferences.service';
 import { Public } from '../common/decorators/public.decorator';
 
-@Controller('preferences')
+@Controller('v1/preferences')
 @Public()
 export class PreferencesController {
   constructor(private readonly preferencesService: PreferencesService) {}

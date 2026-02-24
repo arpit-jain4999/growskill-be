@@ -8,7 +8,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 
 @ApiTags('Files')
-@Controller('files')
+@Controller('v1/files')
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 

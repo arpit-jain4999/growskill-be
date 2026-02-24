@@ -19,15 +19,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
+  async validate(payload: { sub: string; countryCode?: string; phoneNumber?: string }) {
     const user = await this.userModel.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException();
     }
     return {
-      userId: payload.sub,
-      countryCode: payload.countryCode,
-      phoneNumber: payload.phoneNumber,
+      userId: user._id.toString(),
+      organizationId: user.organizationId?.toString() ?? null,
+      role: user.role ?? 'USER',
+      permissions: [],
+      countryCode: user.countryCode,
+      phoneNumber: user.phoneNumber,
     };
   }
 }

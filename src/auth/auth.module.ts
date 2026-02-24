@@ -9,12 +9,17 @@ import { OtpService } from './otp.service';
 import { JwtStrategy } from './jwt.strategy';
 import { User, UserSchema } from './schemas/user.schema';
 import { Otp, OtpSchema } from './schemas/otp.schema';
+import {
+  Organization,
+  OrganizationSchema,
+} from './../organizations/schemas/organization.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Otp.name, schema: OtpSchema },
+      { name: Organization.name, schema: OrganizationSchema },
     ]),
     PassportModule,
     JwtModule.registerAsync({
