@@ -11,7 +11,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggerService } from './common/services/logger.service';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
 
-const CORS_ORIGIN = 'http://localhost:3000';
+const CORS_ORIGIN = 'https://dev-admin.skillgroww.com';
 
 function addCorsHeaders(reply: { header: (name: string, value: string) => unknown }) {
   reply.header('Access-Control-Allow-Origin', CORS_ORIGIN);

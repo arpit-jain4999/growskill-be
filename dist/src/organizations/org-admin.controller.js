@@ -36,6 +36,13 @@ let OrgAdminController = class OrgAdminController {
         this.organizationsService = organizationsService;
         this.permissionsService = permissionsService;
     }
+    async listUsers(actor) {
+        const allowed = [roles_1.ROLES.SUPER_ADMIN, roles_1.ROLES.ADMIN, roles_1.ROLES.PLATFORM_OWNER];
+        if (!allowed.includes(actor.role)) {
+            throw new common_1.ForbiddenException('Only SUPER_ADMIN, ADMIN, or PLATFORM_OWNER can list users');
+        }
+        return this.organizationsService.findUsersByOrg(actor.organizationId);
+    }
     async createUser(body, actor) {
         const organizationId = actor.organizationId;
         const user = await this.userModel.create({
@@ -90,6 +97,14 @@ let OrgAdminController = class OrgAdminController {
     }
 };
 exports.OrgAdminController = OrgAdminController;
+__decorate([
+    (0, common_1.Get)('users'),
+    (0, swagger_1.ApiOperation)({ summary: 'List users in current org (SUPER_ADMIN, ADMIN, or PLATFORM_OWNER)' }),
+    __param(0, (0, current_actor_decorator_1.CurrentActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], OrgAdminController.prototype, "listUsers", null);
 __decorate([
     (0, common_1.Post)('users'),
     (0, common_1.UseGuards)(authorize_guard_1.AuthorizeGuard),

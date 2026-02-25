@@ -8,6 +8,7 @@ export declare class OrgAdminController {
     private organizationsService;
     private permissionsService;
     constructor(userModel: Model<UserDocument>, organizationsService: OrganizationsService, permissionsService: PermissionsService);
+    listUsers(actor: Actor): Promise<UserDocument[]>;
     createUser(body: {
         email?: string;
         name?: string;
