@@ -37,6 +37,16 @@ export class OrgAdminController {
     private permissionsService: PermissionsService,
   ) {}
 
+  @Get('users')
+  @ApiOperation({ summary: 'List users in current org (SUPER_ADMIN, ADMIN, or PLATFORM_OWNER)' })
+  async listUsers(@CurrentActor() actor: Actor) {
+    const allowed = [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PLATFORM_OWNER] as string[];
+    if (!allowed.includes(actor.role)) {
+      throw new ForbiddenException('Only SUPER_ADMIN, ADMIN, or PLATFORM_OWNER can list users');
+    }
+    return this.organizationsService.findUsersByOrg(actor.organizationId!);
+  }
+
   @Post('users')
   @UseGuards(AuthorizeGuard)
   @Authorize(PERMISSIONS.USER_CREATE)
