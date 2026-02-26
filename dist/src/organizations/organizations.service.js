@@ -17,6 +17,11 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const user_schema_1 = require("../auth/schemas/user.schema");
+const order_schema_1 = require("../orders/schemas/order.schema");
+const cohort_schema_1 = require("../cohorts/schemas/cohort.schema");
+const course_schema_1 = require("../courses/schemas/course.schema");
+const module_schema_1 = require("../modules/schemas/module.schema");
+const chapter_schema_1 = require("../chapters/schemas/chapter.schema");
 const organization_repository_1 = require("./repositories/organization.repository");
 const organization_module_repository_1 = require("./repositories/organization-module.repository");
 const permissions_service_1 = require("../permissions/permissions.service");
@@ -26,11 +31,16 @@ const phone_1 = require("../common/helpers/phone");
 const logger_service_1 = require("../common/services/logger.service");
 const DEFAULT_ORG_MODULES = [permissions_1.MODULE_KEYS.COURSES, permissions_1.MODULE_KEYS.COHORTS, permissions_1.MODULE_KEYS.MODULES];
 let OrganizationsService = class OrganizationsService {
-    constructor(orgRepo, orgModuleRepo, permissionsService, userModel, logger) {
+    constructor(orgRepo, orgModuleRepo, permissionsService, userModel, orderModel, cohortModel, courseModel, contentModuleModel, chapterModel, logger) {
         this.orgRepo = orgRepo;
         this.orgModuleRepo = orgModuleRepo;
         this.permissionsService = permissionsService;
         this.userModel = userModel;
+        this.orderModel = orderModel;
+        this.cohortModel = cohortModel;
+        this.courseModel = courseModel;
+        this.contentModuleModel = contentModuleModel;
+        this.chapterModel = chapterModel;
         this.logger = logger;
         this.logger.setContext('OrganizationsService');
     }
@@ -53,6 +63,20 @@ let OrganizationsService = class OrganizationsService {
         if (!org)
             throw new common_1.NotFoundException('Organization not found');
         return org;
+    }
+    async remove(orgId) {
+        const org = await this.findById(orgId);
+        const oid = new mongoose_2.Types.ObjectId(orgId);
+        await this.orderModel.deleteMany({ organizationId: oid }).exec();
+        await this.chapterModel.deleteMany({ organizationId: oid }).exec();
+        await this.contentModuleModel.deleteMany({ organizationId: oid }).exec();
+        await this.courseModel.deleteMany({ organizationId: oid }).exec();
+        await this.cohortModel.deleteMany({ organizationId: oid }).exec();
+        await this.userModel.deleteMany({ organizationId: oid }).exec();
+        await this.permissionsService.deleteAllForOrganization(orgId);
+        await this.orgModuleRepo.deleteByOrg(orgId);
+        await this.orgRepo.delete(orgId);
+        this.logger.log(`Deleted organization ${orgId} and all associated data`);
     }
     async createWithSuperAdmin(dto, superAdmin) {
         const org = await this.orgRepo.create(dto);
@@ -174,9 +198,19 @@ exports.OrganizationsService = OrganizationsService;
 exports.OrganizationsService = OrganizationsService = __decorate([
     (0, common_1.Injectable)(),
     __param(3, (0, mongoose_1.InjectModel)(user_schema_1.User.name)),
+    __param(4, (0, mongoose_1.InjectModel)(order_schema_1.Order.name)),
+    __param(5, (0, mongoose_1.InjectModel)(cohort_schema_1.Cohort.name)),
+    __param(6, (0, mongoose_1.InjectModel)(course_schema_1.Course.name)),
+    __param(7, (0, mongoose_1.InjectModel)(module_schema_1.Module.name)),
+    __param(8, (0, mongoose_1.InjectModel)(chapter_schema_1.Chapter.name)),
     __metadata("design:paramtypes", [organization_repository_1.OrganizationRepository,
         organization_module_repository_1.OrganizationModuleRepository,
         permissions_service_1.PermissionsService,
+        mongoose_2.Model,
+        mongoose_2.Model,
+        mongoose_2.Model,
+        mongoose_2.Model,
+        mongoose_2.Model,
         mongoose_2.Model,
         logger_service_1.LoggerService])
 ], OrganizationsService);

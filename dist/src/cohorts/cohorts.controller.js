@@ -21,10 +21,7 @@ const error_response_dto_1 = require("../common/dto/error-response.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const tenant_context_guard_1 = require("../common/guards/tenant-context.guard");
 const tenant_context_guard_2 = require("../common/guards/tenant-context.guard");
-const authorize_guard_1 = require("../common/guards/authorize.guard");
-const authorize_decorator_1 = require("../common/decorators/authorize.decorator");
 const current_actor_decorator_1 = require("../common/decorators/current-actor.decorator");
-const permissions_1 = require("../common/constants/permissions");
 let CohortsController = class CohortsController {
     constructor(cohortsService) {
         this.cohortsService = cohortsService;
@@ -39,7 +36,7 @@ let CohortsController = class CohortsController {
 exports.CohortsController = CohortsController;
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all active cohorts', description: 'Tenant-scoped. Requires cohort:read.' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all active cohorts', description: 'Tenant-scoped. Any authenticated user in the org can read.' }),
     (0, swagger_1.ApiOkResponse)({ description: 'List of active cohorts', type: [cohort_response_dto_1.CohortResponseDto] }),
     __param(0, (0, current_actor_decorator_1.CurrentActor)()),
     __metadata("design:type", Function),
@@ -48,7 +45,7 @@ __decorate([
 ], CohortsController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get cohort by ID', description: 'Tenant-scoped. Requires cohort:read.' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get cohort by ID', description: 'Tenant-scoped. Any authenticated user in the org can read.' }),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'Cohort ID' }),
     (0, swagger_1.ApiOkResponse)({ description: 'Cohort found', type: cohort_response_dto_1.CohortResponseDto }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Cohort not found', type: error_response_dto_1.StandardErrorResponseDto }),
@@ -61,8 +58,7 @@ __decorate([
 exports.CohortsController = CohortsController = __decorate([
     (0, swagger_1.ApiTags)('Cohorts'),
     (0, common_1.Controller)('v1/cohorts'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, tenant_context_guard_1.TenantContextGuard, tenant_context_guard_2.RequireTenantGuard, authorize_guard_1.AuthorizeGuard),
-    (0, authorize_decorator_1.Authorize)(permissions_1.PERMISSIONS.COHORT_READ),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, tenant_context_guard_1.TenantContextGuard, tenant_context_guard_2.RequireTenantGuard),
     (0, swagger_1.ApiBearerAuth)('JWT-auth'),
     __metadata("design:paramtypes", [cohorts_service_1.CohortsService])
 ], CohortsController);

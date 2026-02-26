@@ -7,4 +7,5 @@ export declare class OrganizationRepository {
     findAll(): Promise<OrganizationDocument[]>;
     findById(id: string): Promise<OrganizationDocument | null>;
     update(id: string, data: Partial<Organization>): Promise<OrganizationDocument | null>;
+    delete(id: string): Promise<void>;
 }

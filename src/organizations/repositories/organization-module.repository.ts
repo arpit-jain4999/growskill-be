@@ -68,4 +68,11 @@ export class OrganizationModuleRepository {
     });
     return !!doc;
   }
+
+  async deleteByOrg(organizationId: string): Promise<number> {
+    const result = await this.model.deleteMany({
+      organizationId: new Types.ObjectId(organizationId),
+    });
+    return result.deletedCount ?? 0;
+  }
 }

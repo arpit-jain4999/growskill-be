@@ -36,6 +36,9 @@ let OrganizationRepository = class OrganizationRepository {
             .findByIdAndUpdate(id, { $set: data }, { new: true })
             .exec();
     }
+    async delete(id) {
+        await this.orgModel.findByIdAndDelete(id).exec();
+    }
 };
 exports.OrganizationRepository = OrganizationRepository;
 exports.OrganizationRepository = OrganizationRepository = __decorate([

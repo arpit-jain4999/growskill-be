@@ -28,5 +28,8 @@ export declare class PlatformController {
         role: string;
     }, actor: Actor): Promise<import("../auth/schemas/user.schema").UserDocument>;
     update(orgId: string, dto: Partial<CreateOrganizationDto>, actor: Actor): Promise<import("./schemas/organization.schema").OrganizationDocument>;
+    delete(orgId: string, actor: Actor): Promise<{
+        deleted: string;
+    }>;
     assignSuperAdmin(orgId: string, dto: AssignSuperAdminDto, actor: Actor): Promise<import("../auth/schemas/user.schema").UserDocument>;
 }

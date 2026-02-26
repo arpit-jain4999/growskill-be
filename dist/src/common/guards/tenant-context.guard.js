@@ -16,6 +16,7 @@ exports.RequireTenantGuard = exports.TenantContextGuard = exports.DEFAULT_X_ORG_
 const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
 const public_decorator_1 = require("../decorators/public.decorator");
+const roles_1 = require("../constants/roles");
 exports.TENANT_RESOLVER = 'TENANT_RESOLVER';
 exports.DEFAULT_X_ORG_ID = '698b0f6076ca77d98d706e65';
 let TenantContextGuard = class TenantContextGuard {
@@ -65,7 +66,13 @@ let RequireTenantGuard = class RequireTenantGuard {
     canActivate(context) {
         const request = context.switchToHttp().getRequest();
         const actor = request.actor;
-        if (!actor?.organizationId) {
+        if (!actor) {
+            throw new common_1.ForbiddenException('Tenant context required for this action');
+        }
+        if (actor.role === roles_1.ROLES.PLATFORM_OWNER) {
+            return true;
+        }
+        if (!actor.organizationId) {
             throw new common_1.ForbiddenException('Tenant context required for this action');
         }
         return true;

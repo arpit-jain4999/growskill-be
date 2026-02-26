@@ -8,4 +8,5 @@ export declare class OrganizationModuleRepository {
     disable(organizationId: string, moduleKey: string): Promise<OrganizationModuleDocument | null>;
     enable(organizationId: string, moduleKey: string, enabledByUserId: string): Promise<OrganizationModuleDocument>;
     isEnabled(organizationId: string, moduleKey: string): Promise<boolean>;
+    deleteByOrg(organizationId: string): Promise<number>;
 }

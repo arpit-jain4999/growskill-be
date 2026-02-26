@@ -20,9 +20,6 @@ const module_response_dto_1 = require("./dto/module-response.dto");
 const error_response_dto_1 = require("../common/dto/error-response.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const tenant_context_guard_1 = require("../common/guards/tenant-context.guard");
-const authorize_guard_1 = require("../common/guards/authorize.guard");
-const authorize_decorator_1 = require("../common/decorators/authorize.decorator");
-const permissions_1 = require("../common/constants/permissions");
 let ModulesController = class ModulesController {
     constructor(modulesService) {
         this.modulesService = modulesService;
@@ -42,7 +39,7 @@ __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({
         summary: 'Get all active modules',
-        description: 'Returns all active modules sorted by display order. Requires module:read permission.',
+        description: 'Returns all active modules sorted by display order. Any authenticated user in the org can read.',
     }),
     (0, swagger_1.ApiOkResponse)({ description: 'List of active modules', type: module_response_dto_1.ModuleListApiResponseDto }),
     __metadata("design:type", Function),
@@ -51,7 +48,7 @@ __decorate([
 ], ModulesController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get module by ID', description: 'Returns a single module by its ID. Requires module:read.' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get module by ID', description: 'Returns a single module by its ID. Any authenticated user in the org can read.' }),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'Module ID (MongoDB ObjectId)' }),
     (0, swagger_1.ApiOkResponse)({ description: 'Module found', type: module_response_dto_1.ModuleApiResponseDto }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Module not found', type: error_response_dto_1.StandardErrorResponseDto }),
@@ -63,7 +60,7 @@ __decorate([
 ], ModulesController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Get)('course/:courseId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get modules by course ID', description: 'Returns all active modules for a given course, sorted by display order. Requires module:read.' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get modules by course ID', description: 'Returns all active modules for a given course, sorted by display order. Any authenticated user in the org can read.' }),
     (0, swagger_1.ApiParam)({ name: 'courseId', description: 'Course ID (MongoDB ObjectId)' }),
     (0, swagger_1.ApiOkResponse)({ description: 'List of modules for the course', type: module_response_dto_1.ModuleListApiResponseDto }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid course ID', type: error_response_dto_1.StandardErrorResponseDto }),
@@ -76,8 +73,7 @@ exports.ModulesController = ModulesController = __decorate([
     (0, swagger_1.ApiTags)('Modules'),
     (0, swagger_1.ApiExtraModels)(module_response_dto_1.ModuleResponseDto),
     (0, common_1.Controller)('v1/modules'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, tenant_context_guard_1.TenantContextGuard, tenant_context_guard_1.RequireTenantGuard, authorize_guard_1.AuthorizeGuard),
-    (0, authorize_decorator_1.Authorize)(permissions_1.PERMISSIONS.MODULE_READ),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, tenant_context_guard_1.TenantContextGuard, tenant_context_guard_1.RequireTenantGuard),
     (0, swagger_1.ApiBearerAuth)('JWT-auth'),
     __metadata("design:paramtypes", [modules_service_1.ModulesService])
 ], ModulesController);

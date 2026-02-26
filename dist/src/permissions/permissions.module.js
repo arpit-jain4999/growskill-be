@@ -18,6 +18,7 @@ const admin_permissions_controller_1 = require("./admin-permissions.controller")
 const user_schema_1 = require("../auth/schemas/user.schema");
 const authorize_guard_1 = require("../common/guards/authorize.guard");
 const common_module_1 = require("../common/common.module");
+const organizations_module_1 = require("../organizations/organizations.module");
 let PermissionsModule = class PermissionsModule {
 };
 exports.PermissionsModule = PermissionsModule;
@@ -25,6 +26,7 @@ exports.PermissionsModule = PermissionsModule = __decorate([
     (0, common_1.Module)({
         imports: [
             common_module_1.CommonModule,
+            (0, common_1.forwardRef)(() => organizations_module_1.OrganizationsModule),
             mongoose_1.MongooseModule.forFeature([
                 { name: org_permission_schema_1.OrgPermission.name, schema: org_permission_schema_1.OrgPermissionSchema },
                 { name: user_permission_schema_1.UserPermission.name, schema: user_permission_schema_1.UserPermissionSchema },

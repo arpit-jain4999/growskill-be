@@ -79,6 +79,11 @@ let PlatformController = class PlatformController {
         this.ensurePlatformOwner(actor);
         return this.organizationsService.update(orgId, dto);
     }
+    async delete(orgId, actor) {
+        this.ensurePlatformOwner(actor);
+        await this.organizationsService.remove(orgId);
+        return { deleted: orgId };
+    }
     async assignSuperAdmin(orgId, dto, actor) {
         this.ensurePlatformOwner(actor);
         return this.organizationsService.assignInitialSuperAdmin(orgId, dto);
@@ -187,6 +192,18 @@ __decorate([
     __metadata("design:paramtypes", [String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], PlatformController.prototype, "update", null);
+__decorate([
+    (0, common_1.Delete)(':orgId'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Delete organization',
+        description: 'Permanently deletes the organization and all associated data (users, cohorts, courses, modules, chapters, orders, permissions). PLATFORM_OWNER only.',
+    }),
+    __param(0, (0, common_1.Param)('orgId')),
+    __param(1, (0, current_actor_decorator_1.CurrentActor)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PlatformController.prototype, "delete", null);
 __decorate([
     (0, common_1.Post)(':orgId/super-admin'),
     (0, swagger_1.ApiOperation)({ summary: 'Assign initial SUPER_ADMIN to organization' }),

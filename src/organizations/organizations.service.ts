@@ -8,6 +8,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Organization, OrganizationDocument } from './schemas/organization.schema';
 import { User, UserDocument } from '../auth/schemas/user.schema';
+import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { Cohort, CohortDocument } from '../cohorts/schemas/cohort.schema';
+import { Course, CourseDocument } from '../courses/schemas/course.schema';
+import { Module as ContentModule, ModuleDocument as ContentModuleDocument } from '../modules/schemas/module.schema';
+import { Chapter, ChapterDocument } from '../chapters/schemas/chapter.schema';
 import { OrganizationRepository } from './repositories/organization.repository';
 import { OrganizationModuleRepository } from './repositories/organization-module.repository';
 import { PermissionsService } from '../permissions/permissions.service';
@@ -66,6 +71,11 @@ export class OrganizationsService {
     private orgModuleRepo: OrganizationModuleRepository,
     private permissionsService: PermissionsService,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(Cohort.name) private cohortModel: Model<CohortDocument>,
+    @InjectModel(Course.name) private courseModel: Model<CourseDocument>,
+    @InjectModel(ContentModule.name) private contentModuleModel: Model<ContentModuleDocument>,
+    @InjectModel(Chapter.name) private chapterModel: Model<ChapterDocument>,
     private logger: LoggerService,
   ) {
     this.logger.setContext('OrganizationsService');
@@ -94,6 +104,27 @@ export class OrganizationsService {
     const org = await this.orgRepo.update(id, dto);
     if (!org) throw new NotFoundException('Organization not found');
     return org;
+  }
+
+  /**
+   * Delete an organization and all associated data (cascade).
+   * Order: orders, chapters, content modules, courses, cohorts, users, permissions, org modules, org.
+   */
+  async remove(orgId: string): Promise<void> {
+    const org = await this.findById(orgId);
+    const oid = new Types.ObjectId(orgId);
+
+    await this.orderModel.deleteMany({ organizationId: oid }).exec();
+    await this.chapterModel.deleteMany({ organizationId: oid }).exec();
+    await this.contentModuleModel.deleteMany({ organizationId: oid }).exec();
+    await this.courseModel.deleteMany({ organizationId: oid }).exec();
+    await this.cohortModel.deleteMany({ organizationId: oid }).exec();
+    await this.userModel.deleteMany({ organizationId: oid }).exec();
+    await this.permissionsService.deleteAllForOrganization(orgId);
+    await this.orgModuleRepo.deleteByOrg(orgId);
+    await this.orgRepo.delete(orgId);
+
+    this.logger.log(`Deleted organization ${orgId} and all associated data`);
   }
 
   async createWithSuperAdmin(

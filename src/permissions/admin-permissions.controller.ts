@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Body, Param, UseGuards, Req } from '@nestjs/common';
 import {
   ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse,
   ApiNotFoundResponse, ApiBadRequestResponse, ApiForbiddenResponse,
@@ -25,6 +25,8 @@ import { CurrentActor } from '../common/decorators/current-actor.decorator';
 import { Actor } from '../common/types/actor';
 import { PERMISSIONS } from '../common/constants/permissions';
 import { PERMISSION_META } from '../common/constants/permission-meta';
+import { ROLES } from '../common/constants/roles';
+import { OrganizationsService } from '../organizations/organizations.service';
 
 @ApiTags('Admin – Permissions')
 @ApiBearerAuth('JWT-auth')
@@ -40,7 +42,27 @@ import { PERMISSION_META } from '../common/constants/permission-meta';
 @Controller('v1/admin/permissions')
 @UseGuards(JwtAuthGuard, TenantContextGuard, RequireTenantGuard)
 export class AdminPermissionsController {
-  constructor(private readonly permissionsService: PermissionsService) {}
+  constructor(
+    private readonly permissionsService: PermissionsService,
+    private readonly organizationsService: OrganizationsService,
+  ) {}
+
+  /** Resolve org id for handlers that need tenant: use actor's org or, for PLATFORM_OWNER, x-org-id header. */
+  private async resolveOrgId(actor: Actor, request: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }): Promise<string> {
+    let orgId = actor.organizationId ?? null;
+    if (!orgId && actor.role === ROLES.PLATFORM_OWNER && request?.headers) {
+      const raw = request.headers['x-org-id'] ?? request.headers['X-Org-Id'];
+      const trimmed = typeof raw === 'string' ? raw.trim() : '';
+      if (trimmed) {
+        await this.organizationsService.findById(trimmed);
+        orgId = trimmed;
+      }
+    }
+    if (!orgId) {
+      throw new BadRequestException('x-org-id header required for this operation');
+    }
+    return orgId;
+  }
 
   @Get('available')
   @UseGuards(AuthorizeGuard)
@@ -66,8 +88,9 @@ export class AdminPermissionsController {
   @ApiOkResponse({ description: 'Org-level permission keys' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT', type: StandardErrorResponseDto })
   @ApiForbiddenResponse({ description: 'Missing permission', type: StandardErrorResponseDto })
-  async listOrgPermissions(@CurrentActor() actor: Actor) {
-    const keys = await this.permissionsService.getOrgPermissions(actor.organizationId!);
+  async listOrgPermissions(@CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    const keys = await this.permissionsService.getOrgPermissions(orgId);
     return { permissions: keys };
   }
 
@@ -86,8 +109,10 @@ export class AdminPermissionsController {
   async getUserPermissions(
     @Param('userId') userId: string,
     @CurrentActor() actor: Actor,
+    @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } },
   ) {
-    return this.permissionsService.getUserPermissions(userId, actor.organizationId!);
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.permissionsService.getUserPermissions(userId, orgId);
   }
 
   @Post('grant')
@@ -104,13 +129,10 @@ export class AdminPermissionsController {
   async grant(
     @Body() dto: GrantPermissionsDto,
     @CurrentActor() actor: Actor,
+    @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } },
   ) {
-    return this.permissionsService.grantToUser(
-      actor.organizationId!,
-      dto.userId,
-      dto.permissions,
-      actor.userId,
-    );
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.permissionsService.grantToUser(orgId, dto.userId, dto.permissions, actor.userId);
   }
 
   @Post('revoke')
@@ -127,12 +149,10 @@ export class AdminPermissionsController {
   async revoke(
     @Body() dto: RevokePermissionsDto,
     @CurrentActor() actor: Actor,
+    @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } },
   ) {
-    return this.permissionsService.revokeFromUser(
-      actor.organizationId!,
-      dto.userId,
-      dto.permissions,
-    );
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.permissionsService.revokeFromUser(orgId, dto.userId, dto.permissions);
   }
 
   @Post('set')
@@ -149,12 +169,9 @@ export class AdminPermissionsController {
   async setPermissions(
     @Body() dto: SetPermissionsDto,
     @CurrentActor() actor: Actor,
+    @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } },
   ) {
-    return this.permissionsService.setUserPermissions(
-      actor.organizationId!,
-      dto.userId,
-      dto.permissions,
-      actor.userId,
-    );
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.permissionsService.setUserPermissions(orgId, dto.userId, dto.permissions, actor.userId);
   }
 }

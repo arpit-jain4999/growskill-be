@@ -7,12 +7,14 @@ import { ModuleRepository } from './repositories/module.repository';
 import { Module as ContentModule, ModuleSchema } from './schemas/module.schema';
 import { OrganizationsModule } from '../organizations/organizations.module';
 import { ChaptersModule } from '../chapters/chapters.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: ContentModule.name, schema: ModuleSchema }]),
     OrganizationsModule,
     ChaptersModule,
+    PermissionsModule,
   ],
   controllers: [ModulesController, AdminModulesController],
   providers: [ModulesService, ModuleRepository],

@@ -34,4 +34,8 @@ export class OrganizationRepository {
       .findByIdAndUpdate(id, { $set: data }, { new: true })
       .exec();
   }
+
+  async delete(id: string): Promise<void> {
+    await this.orgModel.findByIdAndDelete(id).exec();
+  }
 }

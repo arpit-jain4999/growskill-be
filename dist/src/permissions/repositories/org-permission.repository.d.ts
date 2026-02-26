@@ -8,4 +8,5 @@ export declare class OrgPermissionRepository {
     hasKey(organizationId: string, permissionKey: string): Promise<boolean>;
     bulkInsert(organizationId: string, permissionKeys: string[], grantedBy: string): Promise<number>;
     bulkRemove(organizationId: string, permissionKeys: string[]): Promise<number>;
+    deleteAllByOrg(organizationId: string): Promise<number>;
 }

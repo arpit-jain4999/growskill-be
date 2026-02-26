@@ -1,6 +1,11 @@
 import { Model } from 'mongoose';
 import { OrganizationDocument } from './schemas/organization.schema';
 import { UserDocument } from '../auth/schemas/user.schema';
+import { OrderDocument } from '../orders/schemas/order.schema';
+import { CohortDocument } from '../cohorts/schemas/cohort.schema';
+import { CourseDocument } from '../courses/schemas/course.schema';
+import { ModuleDocument as ContentModuleDocument } from '../modules/schemas/module.schema';
+import { ChapterDocument } from '../chapters/schemas/chapter.schema';
 import { OrganizationRepository } from './repositories/organization.repository';
 import { OrganizationModuleRepository } from './repositories/organization-module.repository';
 import { PermissionsService } from '../permissions/permissions.service';
@@ -47,12 +52,18 @@ export declare class OrganizationsService {
     private orgModuleRepo;
     private permissionsService;
     private userModel;
+    private orderModel;
+    private cohortModel;
+    private courseModel;
+    private contentModuleModel;
+    private chapterModel;
     private logger;
-    constructor(orgRepo: OrganizationRepository, orgModuleRepo: OrganizationModuleRepository, permissionsService: PermissionsService, userModel: Model<UserDocument>, logger: LoggerService);
+    constructor(orgRepo: OrganizationRepository, orgModuleRepo: OrganizationModuleRepository, permissionsService: PermissionsService, userModel: Model<UserDocument>, orderModel: Model<OrderDocument>, cohortModel: Model<CohortDocument>, courseModel: Model<CourseDocument>, contentModuleModel: Model<ContentModuleDocument>, chapterModel: Model<ChapterDocument>, logger: LoggerService);
     create(dto: CreateOrganizationDto): Promise<OrganizationDocument>;
     findAll(): Promise<OrganizationDocument[]>;
     findById(id: string): Promise<OrganizationDocument>;
     update(id: string, dto: Partial<CreateOrganizationDto>): Promise<OrganizationDocument>;
+    remove(orgId: string): Promise<void>;
     createWithSuperAdmin(dto: CreateOrganizationDto, superAdmin: AssignSuperAdminDto): Promise<{
         organization: OrganizationDocument;
         user: UserDocument;

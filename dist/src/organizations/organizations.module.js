@@ -12,6 +12,11 @@ const mongoose_1 = require("@nestjs/mongoose");
 const organization_schema_1 = require("./schemas/organization.schema");
 const organization_module_schema_1 = require("./schemas/organization-module.schema");
 const user_schema_1 = require("../auth/schemas/user.schema");
+const order_schema_1 = require("../orders/schemas/order.schema");
+const cohort_schema_1 = require("../cohorts/schemas/cohort.schema");
+const course_schema_1 = require("../courses/schemas/course.schema");
+const module_schema_1 = require("../modules/schemas/module.schema");
+const chapter_schema_1 = require("../chapters/schemas/chapter.schema");
 const organization_repository_1 = require("./repositories/organization.repository");
 const organization_module_repository_1 = require("./repositories/organization-module.repository");
 const organizations_service_1 = require("./organizations.service");
@@ -34,6 +39,11 @@ exports.OrganizationsModule = OrganizationsModule = __decorate([
                 { name: organization_schema_1.Organization.name, schema: organization_schema_1.OrganizationSchema },
                 { name: organization_module_schema_1.OrganizationModule.name, schema: organization_module_schema_1.OrganizationModuleSchema },
                 { name: user_schema_1.User.name, schema: user_schema_1.UserSchema },
+                { name: order_schema_1.Order.name, schema: order_schema_1.OrderSchema },
+                { name: cohort_schema_1.Cohort.name, schema: cohort_schema_1.CohortSchema },
+                { name: course_schema_1.Course.name, schema: course_schema_1.CourseSchema },
+                { name: module_schema_1.Module.name, schema: module_schema_1.ModuleSchema },
+                { name: chapter_schema_1.Chapter.name, schema: chapter_schema_1.ChapterSchema },
             ]),
         ],
         controllers: [platform_controller_1.PlatformController, org_admin_controller_1.OrgAdminController],

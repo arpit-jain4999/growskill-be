@@ -15,6 +15,7 @@ const courses_service_1 = require("./courses.service");
 const course_repository_1 = require("./repositories/course.repository");
 const course_schema_1 = require("./schemas/course.schema");
 const organizations_module_1 = require("../organizations/organizations.module");
+const permissions_module_1 = require("../permissions/permissions.module");
 let CoursesModule = class CoursesModule {
 };
 exports.CoursesModule = CoursesModule;
@@ -23,6 +24,7 @@ exports.CoursesModule = CoursesModule = __decorate([
         imports: [
             mongoose_1.MongooseModule.forFeature([{ name: course_schema_1.Course.name, schema: course_schema_1.CourseSchema }]),
             organizations_module_1.OrganizationsModule,
+            permissions_module_1.PermissionsModule,
         ],
         controllers: [courses_controller_1.CoursesController, admin_courses_controller_1.AdminCoursesController],
         providers: [courses_service_1.CoursesService, course_repository_1.CourseRepository],

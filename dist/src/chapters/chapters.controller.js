@@ -20,9 +20,6 @@ const chapter_response_dto_1 = require("./dto/chapter-response.dto");
 const error_response_dto_1 = require("../common/dto/error-response.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const tenant_context_guard_1 = require("../common/guards/tenant-context.guard");
-const authorize_guard_1 = require("../common/guards/authorize.guard");
-const authorize_decorator_1 = require("../common/decorators/authorize.decorator");
-const permissions_1 = require("../common/constants/permissions");
 let ChaptersController = class ChaptersController {
     constructor(chaptersService) {
         this.chaptersService = chaptersService;
@@ -40,7 +37,7 @@ let ChaptersController = class ChaptersController {
 exports.ChaptersController = ChaptersController;
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all active chapters', description: 'Requires chapter:read permission.' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all active chapters', description: 'Any authenticated user in the org can read.' }),
     (0, swagger_1.ApiOkResponse)({ description: 'List of active chapters', type: chapter_response_dto_1.ChapterListApiResponseDto }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
@@ -48,7 +45,7 @@ __decorate([
 ], ChaptersController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get chapter by ID', description: 'Requires chapter:read.' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get chapter by ID', description: 'Any authenticated user in the org can read.' }),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'Chapter ID (MongoDB ObjectId)' }),
     (0, swagger_1.ApiOkResponse)({ description: 'Chapter found', type: chapter_response_dto_1.ChapterApiResponseDto }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Chapter not found', type: error_response_dto_1.StandardErrorResponseDto }),
@@ -60,7 +57,7 @@ __decorate([
 ], ChaptersController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Get)('module/:moduleId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get chapters by module ID', description: 'Returns all active chapters for a module, sorted by order. Requires chapter:read.' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get chapters by module ID', description: 'Returns all active chapters for a module, sorted by order. Any authenticated user in the org can read.' }),
     (0, swagger_1.ApiParam)({ name: 'moduleId', description: 'Module ID (MongoDB ObjectId)' }),
     (0, swagger_1.ApiOkResponse)({ description: 'List of chapters for the module', type: chapter_response_dto_1.ChapterListApiResponseDto }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid module ID', type: error_response_dto_1.StandardErrorResponseDto }),
@@ -73,8 +70,7 @@ exports.ChaptersController = ChaptersController = __decorate([
     (0, swagger_1.ApiTags)('Chapters'),
     (0, swagger_1.ApiExtraModels)(chapter_response_dto_1.ChapterResponseDto),
     (0, common_1.Controller)('v1/chapters'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, tenant_context_guard_1.TenantContextGuard, tenant_context_guard_1.RequireTenantGuard, authorize_guard_1.AuthorizeGuard),
-    (0, authorize_decorator_1.Authorize)(permissions_1.PERMISSIONS.CHAPTER_READ),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, tenant_context_guard_1.TenantContextGuard, tenant_context_guard_1.RequireTenantGuard),
     (0, swagger_1.ApiBearerAuth)('JWT-auth'),
     __metadata("design:paramtypes", [chapters_service_1.ChaptersService])
 ], ChaptersController);

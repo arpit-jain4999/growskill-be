@@ -11,6 +11,7 @@ export declare class PermissionsService {
     private logger;
     constructor(orgPermRepo: OrgPermissionRepository, userPermRepo: UserPermissionRepository, userModel: Model<UserDocument>, logger: LoggerService);
     getOrgPermissions(organizationId: string): Promise<string[]>;
+    deleteAllForOrganization(organizationId: string): Promise<void>;
     syncOrgPermissionsForModule(organizationId: string, moduleKey: string, enable: boolean, userId: string): Promise<void>;
     getUserAssignedPermissions(organizationId: string, userId: string): Promise<string[]>;
     getEffectivePermissions(actor: Actor): Promise<string[]>;

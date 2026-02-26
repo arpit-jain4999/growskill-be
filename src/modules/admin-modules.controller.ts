@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req } from '@nestjs/common';
 import {
   ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse,
   ApiNotFoundResponse, ApiBadRequestResponse, ApiForbiddenResponse,
@@ -16,6 +16,8 @@ import { Authorize } from '../common/decorators/authorize.decorator';
 import { CurrentActor } from '../common/decorators/current-actor.decorator';
 import { Actor } from '../common/types/actor';
 import { PERMISSIONS } from '../common/constants/permissions';
+import { ROLES } from '../common/constants/roles';
+import { OrganizationsService } from '../organizations/organizations.service';
 
 @ApiTags('Admin')
 @ApiBearerAuth('JWT-auth')
@@ -23,32 +25,52 @@ import { PERMISSIONS } from '../common/constants/permissions';
 @Controller('v1/admin')
 @UseGuards(JwtAuthGuard, TenantContextGuard, RequireTenantGuard)
 export class AdminModulesController {
-  constructor(private readonly modulesService: ModulesService) {}
+  constructor(
+    private readonly modulesService: ModulesService,
+    private readonly organizationsService: OrganizationsService,
+  ) {}
+
+  private async resolveOrgId(
+    actor: Actor,
+    request: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } },
+  ): Promise<string> {
+    let orgId = actor.organizationId ?? null;
+    if (!orgId && actor.role === ROLES.PLATFORM_OWNER && request?.headers) {
+      const raw = request.headers['x-org-id'] ?? request.headers['X-Org-Id'];
+      const trimmed = typeof raw === 'string' ? raw.trim() : '';
+      if (trimmed) {
+        await this.organizationsService.findById(trimmed);
+        orgId = trimmed;
+      }
+    }
+    if (!orgId) {
+      throw new BadRequestException('x-org-id header required for this operation');
+    }
+    return orgId;
+  }
 
   @Get('modules')
-  @UseGuards(AuthorizeGuard)
-  @Authorize(PERMISSIONS.MODULE_READ)
   @ApiOperation({
     summary: '[Admin] Get all modules',
-    description: 'Tenant-scoped. Returns all modules (including inactive) for the organisation, sorted by display order.',
+    description: 'Tenant-scoped. Any authenticated user in the org can read. PLATFORM_OWNER must send x-org-id.',
   })
   @ApiOkResponse({ description: 'List of all modules. Response: `{ success: true, data: ModuleResponseDto[] }`', type: ModuleListApiResponseDto })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT', type: StandardErrorResponseDto })
   @ApiForbiddenResponse({ description: 'Missing permission or tenant context', type: StandardErrorResponseDto })
-  async findAll(@CurrentActor() actor: Actor) {
-    return this.modulesService.findAllForAdmin(actor.organizationId!);
+  async findAll(@CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.modulesService.findAllForAdmin(orgId);
   }
 
   @Get('modules/:id')
-  @UseGuards(AuthorizeGuard)
-  @Authorize(PERMISSIONS.MODULE_READ)
-  @ApiOperation({ summary: '[Admin] Get module by ID', description: 'Tenant-scoped. Returns a single module by ID.' })
+  @ApiOperation({ summary: '[Admin] Get module by ID', description: 'Any authenticated user in the org can read. PLATFORM_OWNER must send x-org-id.' })
   @ApiParam({ name: 'id', description: 'Module ID (MongoDB ObjectId)', example: '507f1f77bcf86cd799439011' })
   @ApiOkResponse({ description: 'Module found. Response: `{ success: true, data: ModuleResponseDto }`', type: ModuleApiResponseDto })
   @ApiNotFoundResponse({ description: 'Module not found', type: StandardErrorResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid module ID', type: StandardErrorResponseDto })
-  async findOne(@Param('id') id: string, @CurrentActor() actor: Actor) {
-    return this.modulesService.findByIdForAdmin(id, actor.organizationId!);
+  async findOne(@Param('id') id: string, @CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.modulesService.findByIdForAdmin(id, orgId);
   }
 
   @Post('module')
@@ -56,37 +78,40 @@ export class AdminModulesController {
   @Authorize(PERMISSIONS.MODULE_CREATE)
   @ApiOperation({
     summary: '[Admin] Create module',
-    description: 'Creates a new content module in the organisation. Optionally link to a course via courseId.',
+    description: 'Creates a new content module in the organisation. PLATFORM_OWNER must send x-org-id.',
   })
   @ApiCreatedResponse({ description: 'Module created. Response: `{ success: true, data: ModuleResponseDto }`', type: ModuleApiResponseDto })
   @ApiBadRequestResponse({ description: 'Validation error', type: StandardErrorResponseDto })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT', type: StandardErrorResponseDto })
   @ApiForbiddenResponse({ description: 'Missing permission or tenant context', type: StandardErrorResponseDto })
-  async create(@Body() dto: CreateModuleDto, @CurrentActor() actor: Actor) {
-    return this.modulesService.create(actor.organizationId!, dto);
+  async create(@Body() dto: CreateModuleDto, @CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.modulesService.create(orgId, dto);
   }
 
   @Patch('module/:id')
   @UseGuards(AuthorizeGuard)
   @Authorize(PERMISSIONS.MODULE_UPDATE)
-  @ApiOperation({ summary: '[Admin] Update module', description: 'Partially update a module. Only provided fields are changed.' })
+  @ApiOperation({ summary: '[Admin] Update module', description: 'Partially update a module. PLATFORM_OWNER must send x-org-id.' })
   @ApiParam({ name: 'id', description: 'Module ID (MongoDB ObjectId)', example: '507f1f77bcf86cd799439011' })
   @ApiOkResponse({ description: 'Module updated. Response: `{ success: true, data: ModuleResponseDto }`', type: ModuleApiResponseDto })
   @ApiNotFoundResponse({ description: 'Module not found', type: StandardErrorResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid module ID or validation error', type: StandardErrorResponseDto })
-  async update(@Param('id') id: string, @Body() dto: UpdateModuleDto, @CurrentActor() actor: Actor) {
-    return this.modulesService.update(id, actor.organizationId!, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateModuleDto, @CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.modulesService.update(id, orgId, dto);
   }
 
   @Delete('module/:id')
   @UseGuards(AuthorizeGuard)
   @Authorize(PERMISSIONS.MODULE_DELETE)
-  @ApiOperation({ summary: '[Admin] Delete module', description: 'Permanently deletes a module from the organisation.' })
+  @ApiOperation({ summary: '[Admin] Delete module', description: 'Permanently deletes a module. PLATFORM_OWNER must send x-org-id.' })
   @ApiParam({ name: 'id', description: 'Module ID (MongoDB ObjectId)', example: '507f1f77bcf86cd799439011' })
   @ApiOkResponse({ description: 'Module deleted. Response: `{ success: true, data: ModuleResponseDto }`', type: ModuleApiResponseDto })
   @ApiNotFoundResponse({ description: 'Module not found', type: StandardErrorResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid module ID', type: StandardErrorResponseDto })
-  async remove(@Param('id') id: string, @CurrentActor() actor: Actor) {
-    return this.modulesService.remove(id, actor.organizationId!);
+  async remove(@Param('id') id: string, @CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.modulesService.remove(id, orgId);
   }
 }

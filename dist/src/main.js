@@ -9,7 +9,7 @@ const app_module_1 = require("./app.module");
 const http_exception_filter_1 = require("./common/filters/http-exception.filter");
 const logger_service_1 = require("./common/services/logger.service");
 const transform_response_interceptor_1 = require("./common/interceptors/transform-response.interceptor");
-const CORS_ORIGIN = 'https://dev-admin.skillgroww.com';
+const CORS_ORIGIN = 'http://localhost:3000';
 function addCorsHeaders(reply) {
     reply.header('Access-Control-Allow-Origin', CORS_ORIGIN);
     reply.header('Access-Control-Allow-Credentials', 'true');

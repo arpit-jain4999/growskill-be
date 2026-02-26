@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { OrgPermission, OrgPermissionSchema } from './schemas/org-permission.schema';
 import { UserPermission, UserPermissionSchema } from './schemas/user-permission.schema';
@@ -9,10 +9,12 @@ import { AdminPermissionsController } from './admin-permissions.controller';
 import { User, UserSchema } from '../auth/schemas/user.schema';
 import { PERMISSIONS_SERVICE } from '../common/guards/authorize.guard';
 import { CommonModule } from '../common/common.module';
+import { OrganizationsModule } from '../organizations/organizations.module';
 
 @Module({
   imports: [
     CommonModule,
+    forwardRef(() => OrganizationsModule),
     MongooseModule.forFeature([
       { name: OrgPermission.name, schema: OrgPermissionSchema },
       { name: UserPermission.name, schema: UserPermissionSchema },

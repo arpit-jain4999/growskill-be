@@ -22,10 +22,7 @@ const error_response_dto_1 = require("../common/dto/error-response.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const tenant_context_guard_1 = require("../common/guards/tenant-context.guard");
 const tenant_context_guard_2 = require("../common/guards/tenant-context.guard");
-const authorize_guard_1 = require("../common/guards/authorize.guard");
-const authorize_decorator_1 = require("../common/decorators/authorize.decorator");
 const current_actor_decorator_1 = require("../common/decorators/current-actor.decorator");
-const permissions_1 = require("../common/constants/permissions");
 let CoursesController = class CoursesController {
     constructor(coursesService) {
         this.coursesService = coursesService;
@@ -49,7 +46,7 @@ __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({
         summary: 'Get all published courses',
-        description: 'Returns all published courses. Optional query params: **name** (search by course title, case-insensitive) and **cohortId** (filter by cohort). Public endpoint.',
+        description: 'Returns all published courses. Optional query params: **name** (search by course title, case-insensitive) and **cohortId** (filter by cohort). Any authenticated user in the org can read.',
     }),
     (0, swagger_1.ApiQuery)({
         name: 'name',
@@ -115,8 +112,7 @@ exports.CoursesController = CoursesController = __decorate([
     (0, swagger_1.ApiTags)('Courses'),
     (0, swagger_1.ApiExtraModels)(course_response_dto_1.CourseResponseDto, course_response_dto_1.FeeDto, find_all_courses_query_dto_1.FindAllCoursesQueryDto),
     (0, common_1.Controller)('v1/courses'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, tenant_context_guard_1.TenantContextGuard, tenant_context_guard_2.RequireTenantGuard, authorize_guard_1.AuthorizeGuard),
-    (0, authorize_decorator_1.Authorize)(permissions_1.PERMISSIONS.COURSE_READ),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, tenant_context_guard_1.TenantContextGuard, tenant_context_guard_2.RequireTenantGuard),
     (0, swagger_1.ApiBearerAuth)('JWT-auth'),
     __metadata("design:paramtypes", [courses_service_1.CoursesService])
 ], CoursesController);

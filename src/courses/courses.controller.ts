@@ -21,17 +21,13 @@ import { StandardErrorResponseDto } from '../common/dto/error-response.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { TenantContextGuard } from '../common/guards/tenant-context.guard';
 import { RequireTenantGuard } from '../common/guards/tenant-context.guard';
-import { AuthorizeGuard } from '../common/guards/authorize.guard';
-import { Authorize } from '../common/decorators/authorize.decorator';
 import { CurrentActor } from '../common/decorators/current-actor.decorator';
 import { Actor } from '../common/types/actor';
-import { PERMISSIONS } from '../common/constants/permissions';
 
 @ApiTags('Courses')
 @ApiExtraModels(CourseResponseDto, FeeDto, FindAllCoursesQueryDto)
 @Controller('v1/courses')
-@UseGuards(JwtAuthGuard, TenantContextGuard, RequireTenantGuard, AuthorizeGuard)
-@Authorize(PERMISSIONS.COURSE_READ)
+@UseGuards(JwtAuthGuard, TenantContextGuard, RequireTenantGuard)
 @ApiBearerAuth('JWT-auth')
 export class CoursesController {
   constructor(private readonly coursesService: CoursesService) {}
@@ -40,7 +36,7 @@ export class CoursesController {
   @ApiOperation({
     summary: 'Get all published courses',
     description:
-      'Returns all published courses. Optional query params: **name** (search by course title, case-insensitive) and **cohortId** (filter by cohort). Public endpoint.',
+      'Returns all published courses. Optional query params: **name** (search by course title, case-insensitive) and **cohortId** (filter by cohort). Any authenticated user in the org can read.',
   })
   @ApiQuery({
     name: 'name',

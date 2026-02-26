@@ -26,28 +26,51 @@ const authorize_decorator_1 = require("../common/decorators/authorize.decorator"
 const current_actor_decorator_1 = require("../common/decorators/current-actor.decorator");
 const permissions_1 = require("../common/constants/permissions");
 const permission_meta_1 = require("../common/constants/permission-meta");
+const roles_1 = require("../common/constants/roles");
+const organizations_service_1 = require("../organizations/organizations.service");
 let AdminPermissionsController = class AdminPermissionsController {
-    constructor(permissionsService) {
+    constructor(permissionsService, organizationsService) {
         this.permissionsService = permissionsService;
+        this.organizationsService = organizationsService;
+    }
+    async resolveOrgId(actor, request) {
+        let orgId = actor.organizationId ?? null;
+        if (!orgId && actor.role === roles_1.ROLES.PLATFORM_OWNER && request?.headers) {
+            const raw = request.headers['x-org-id'] ?? request.headers['X-Org-Id'];
+            const trimmed = typeof raw === 'string' ? raw.trim() : '';
+            if (trimmed) {
+                await this.organizationsService.findById(trimmed);
+                orgId = trimmed;
+            }
+        }
+        if (!orgId) {
+            throw new common_1.BadRequestException('x-org-id header required for this operation');
+        }
+        return orgId;
     }
     async listAvailable() {
         return permission_meta_1.PERMISSION_META;
     }
-    async listOrgPermissions(actor) {
-        const keys = await this.permissionsService.getOrgPermissions(actor.organizationId);
+    async listOrgPermissions(actor, req) {
+        const orgId = await this.resolveOrgId(actor, req);
+        const keys = await this.permissionsService.getOrgPermissions(orgId);
         return { permissions: keys };
     }
-    async getUserPermissions(userId, actor) {
-        return this.permissionsService.getUserPermissions(userId, actor.organizationId);
+    async getUserPermissions(userId, actor, req) {
+        const orgId = await this.resolveOrgId(actor, req);
+        return this.permissionsService.getUserPermissions(userId, orgId);
     }
-    async grant(dto, actor) {
-        return this.permissionsService.grantToUser(actor.organizationId, dto.userId, dto.permissions, actor.userId);
+    async grant(dto, actor, req) {
+        const orgId = await this.resolveOrgId(actor, req);
+        return this.permissionsService.grantToUser(orgId, dto.userId, dto.permissions, actor.userId);
     }
-    async revoke(dto, actor) {
-        return this.permissionsService.revokeFromUser(actor.organizationId, dto.userId, dto.permissions);
+    async revoke(dto, actor, req) {
+        const orgId = await this.resolveOrgId(actor, req);
+        return this.permissionsService.revokeFromUser(orgId, dto.userId, dto.permissions);
     }
-    async setPermissions(dto, actor) {
-        return this.permissionsService.setUserPermissions(actor.organizationId, dto.userId, dto.permissions, actor.userId);
+    async setPermissions(dto, actor, req) {
+        const orgId = await this.resolveOrgId(actor, req);
+        return this.permissionsService.setUserPermissions(orgId, dto.userId, dto.permissions, actor.userId);
     }
 };
 exports.AdminPermissionsController = AdminPermissionsController;
@@ -78,8 +101,9 @@ __decorate([
     (0, swagger_1.ApiUnauthorizedResponse)({ description: 'Missing or invalid JWT', type: error_response_dto_1.StandardErrorResponseDto }),
     (0, swagger_1.ApiForbiddenResponse)({ description: 'Missing permission', type: error_response_dto_1.StandardErrorResponseDto }),
     __param(0, (0, current_actor_decorator_1.CurrentActor)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], AdminPermissionsController.prototype, "listOrgPermissions", null);
 __decorate([
@@ -97,8 +121,9 @@ __decorate([
     (0, swagger_1.ApiForbiddenResponse)({ description: 'User not in your organisation or missing permission', type: error_response_dto_1.StandardErrorResponseDto }),
     __param(0, (0, common_1.Param)('userId')),
     __param(1, (0, current_actor_decorator_1.CurrentActor)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AdminPermissionsController.prototype, "getUserPermissions", null);
 __decorate([
@@ -115,8 +140,9 @@ __decorate([
     (0, swagger_1.ApiForbiddenResponse)({ description: 'User not in your organisation or missing permission', type: error_response_dto_1.StandardErrorResponseDto }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, current_actor_decorator_1.CurrentActor)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [permission_management_dto_1.GrantPermissionsDto, Object]),
+    __metadata("design:paramtypes", [permission_management_dto_1.GrantPermissionsDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AdminPermissionsController.prototype, "grant", null);
 __decorate([
@@ -133,8 +159,9 @@ __decorate([
     (0, swagger_1.ApiForbiddenResponse)({ description: 'User not in your organisation or missing permission', type: error_response_dto_1.StandardErrorResponseDto }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, current_actor_decorator_1.CurrentActor)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [permission_management_dto_1.RevokePermissionsDto, Object]),
+    __metadata("design:paramtypes", [permission_management_dto_1.RevokePermissionsDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AdminPermissionsController.prototype, "revoke", null);
 __decorate([
@@ -151,8 +178,9 @@ __decorate([
     (0, swagger_1.ApiForbiddenResponse)({ description: 'User not in your organisation or missing permission', type: error_response_dto_1.StandardErrorResponseDto }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, current_actor_decorator_1.CurrentActor)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [permission_management_dto_1.SetPermissionsDto, Object]),
+    __metadata("design:paramtypes", [permission_management_dto_1.SetPermissionsDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AdminPermissionsController.prototype, "setPermissions", null);
 exports.AdminPermissionsController = AdminPermissionsController = __decorate([
@@ -161,6 +189,7 @@ exports.AdminPermissionsController = AdminPermissionsController = __decorate([
     (0, swagger_1.ApiExtraModels)(permission_response_dto_1.PermissionInfoDto, permission_response_dto_1.AvailablePermissionsResponseDto, permission_response_dto_1.UserPermissionsApiResponseDto, permission_response_dto_1.PermissionUpdateResponseDto, permission_management_dto_1.GrantPermissionsDto, permission_management_dto_1.RevokePermissionsDto, permission_management_dto_1.SetPermissionsDto),
     (0, common_1.Controller)('v1/admin/permissions'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, tenant_context_guard_1.TenantContextGuard, tenant_context_guard_1.RequireTenantGuard),
-    __metadata("design:paramtypes", [permissions_service_1.PermissionsService])
+    __metadata("design:paramtypes", [permissions_service_1.PermissionsService,
+        organizations_service_1.OrganizationsService])
 ], AdminPermissionsController);
 //# sourceMappingURL=admin-permissions.controller.js.map

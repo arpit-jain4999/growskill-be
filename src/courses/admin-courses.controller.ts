@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req } from '@nestjs/common';
 import {
   ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse,
   ApiNotFoundResponse, ApiBadRequestResponse, ApiForbiddenResponse,
@@ -16,65 +16,90 @@ import { Authorize } from '../common/decorators/authorize.decorator';
 import { CurrentActor } from '../common/decorators/current-actor.decorator';
 import { Actor } from '../common/types/actor';
 import { PERMISSIONS } from '../common/constants/permissions';
+import { ROLES } from '../common/constants/roles';
+import { OrganizationsService } from '../organizations/organizations.service';
 
 @ApiTags('Admin')
 @ApiBearerAuth('JWT-auth')
 @Controller('v1/admin')
 @UseGuards(JwtAuthGuard, TenantContextGuard, RequireTenantGuard)
 export class AdminCoursesController {
-  constructor(private readonly coursesService: CoursesService) {}
+  constructor(
+    private readonly coursesService: CoursesService,
+    private readonly organizationsService: OrganizationsService,
+  ) {}
+
+  private async resolveOrgId(
+    actor: Actor,
+    request: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } },
+  ): Promise<string> {
+    let orgId = actor.organizationId ?? null;
+    if (!orgId && actor.role === ROLES.PLATFORM_OWNER && request?.headers) {
+      const raw = request.headers['x-org-id'] ?? request.headers['X-Org-Id'];
+      const trimmed = typeof raw === 'string' ? raw.trim() : '';
+      if (trimmed) {
+        await this.organizationsService.findById(trimmed);
+        orgId = trimmed;
+      }
+    }
+    if (!orgId) {
+      throw new BadRequestException('x-org-id header required for this operation');
+    }
+    return orgId;
+  }
 
   @Get('courses')
-  @UseGuards(AuthorizeGuard)
-  @Authorize(PERMISSIONS.COURSE_READ)
-  @ApiOperation({ summary: '[Admin] Get all courses', description: 'Tenant-scoped. Includes published and unpublished.' })
+  @ApiOperation({ summary: '[Admin] Get all courses', description: 'Tenant-scoped. Any authenticated user in the org can read. PLATFORM_OWNER must send x-org-id.' })
   @ApiOkResponse({ description: 'List of all courses', type: [CourseResponseDto] })
   @ApiUnauthorizedResponse({ description: 'Unauthorized', type: StandardErrorResponseDto })
   @ApiForbiddenResponse({ description: 'Forbidden', type: StandardErrorResponseDto })
-  async findAll(@CurrentActor() actor: Actor) {
-    return this.coursesService.findAllForAdmin(actor.organizationId!);
+  async findAll(@CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.coursesService.findAllForAdmin(orgId);
   }
 
   @Get('courses/:id')
-  @UseGuards(AuthorizeGuard)
-  @Authorize(PERMISSIONS.COURSE_READ)
-  @ApiOperation({ summary: '[Admin] Get course by ID' })
+  @ApiOperation({ summary: '[Admin] Get course by ID', description: 'Any authenticated user in the org can read. PLATFORM_OWNER must send x-org-id.' })
   @ApiParam({ name: 'id', description: 'Course ID' })
   @ApiOkResponse({ description: 'Course found', type: CourseResponseDto })
   @ApiNotFoundResponse({ description: 'Course not found', type: StandardErrorResponseDto })
-  async findOne(@Param('id') id: string, @CurrentActor() actor: Actor) {
-    return this.coursesService.findById(id, actor.organizationId!);
+  async findOne(@Param('id') id: string, @CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.coursesService.findById(id, orgId);
   }
 
   @Post('course')
   @UseGuards(AuthorizeGuard)
   @Authorize(PERMISSIONS.COURSE_CREATE)
-  @ApiOperation({ summary: '[Admin] Create course', description: 'Creates a course. The authenticated user becomes the instructor.' })
+  @ApiOperation({ summary: '[Admin] Create course', description: 'Creates a course. The authenticated user becomes the instructor. PLATFORM_OWNER must send x-org-id.' })
   @ApiCreatedResponse({ description: 'Course created', type: CourseResponseDto })
   @ApiBadRequestResponse({ description: 'Validation error', type: StandardErrorResponseDto })
-  async create(@Body() dto: CreateCourseDto, @CurrentActor() actor: Actor) {
-    return this.coursesService.create(actor.organizationId!, actor.userId, dto);
+  async create(@Body() dto: CreateCourseDto, @CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.coursesService.create(orgId, actor.userId, dto);
   }
 
   @Patch('course/:id')
   @UseGuards(AuthorizeGuard)
   @Authorize(PERMISSIONS.COURSE_UPDATE)
-  @ApiOperation({ summary: '[Admin] Update course' })
+  @ApiOperation({ summary: '[Admin] Update course', description: 'PLATFORM_OWNER must send x-org-id.' })
   @ApiParam({ name: 'id', description: 'Course ID' })
   @ApiOkResponse({ description: 'Course updated', type: CourseResponseDto })
   @ApiNotFoundResponse({ description: 'Course not found', type: StandardErrorResponseDto })
-  async update(@Param('id') id: string, @Body() dto: UpdateCourseDto, @CurrentActor() actor: Actor) {
-    return this.coursesService.update(id, actor.organizationId!, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateCourseDto, @CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.coursesService.update(id, orgId, dto);
   }
 
   @Delete('course/:id')
   @UseGuards(AuthorizeGuard)
   @Authorize(PERMISSIONS.COURSE_DELETE)
-  @ApiOperation({ summary: '[Admin] Delete course' })
+  @ApiOperation({ summary: '[Admin] Delete course', description: 'PLATFORM_OWNER must send x-org-id.' })
   @ApiParam({ name: 'id', description: 'Course ID' })
   @ApiOkResponse({ description: 'Course deleted', type: CourseResponseDto })
   @ApiNotFoundResponse({ description: 'Course not found', type: StandardErrorResponseDto })
-  async remove(@Param('id') id: string, @CurrentActor() actor: Actor) {
-    return this.coursesService.remove(id, actor.organizationId!);
+  async remove(@Param('id') id: string, @CurrentActor() actor: Actor, @Req() req: { headers?: { 'x-org-id'?: string; 'X-Org-Id'?: string } }) {
+    const orgId = await this.resolveOrgId(actor, req);
+    return this.coursesService.remove(id, orgId);
   }
 }

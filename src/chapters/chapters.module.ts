@@ -6,11 +6,13 @@ import { ChaptersService } from './chapters.service';
 import { ChapterRepository } from './repositories/chapter.repository';
 import { Chapter, ChapterSchema } from './schemas/chapter.schema';
 import { OrganizationsModule } from '../organizations/organizations.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Chapter.name, schema: ChapterSchema }]),
     OrganizationsModule,
+    PermissionsModule,
   ],
   controllers: [ChaptersController, AdminChaptersController],
   providers: [ChaptersService, ChapterRepository],

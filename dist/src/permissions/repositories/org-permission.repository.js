@@ -69,6 +69,12 @@ let OrgPermissionRepository = class OrgPermissionRepository {
         });
         return result.deletedCount ?? 0;
     }
+    async deleteAllByOrg(organizationId) {
+        const result = await this.model.deleteMany({
+            organizationId: new mongoose_2.Types.ObjectId(organizationId),
+        });
+        return result.deletedCount ?? 0;
+    }
 };
 exports.OrgPermissionRepository = OrgPermissionRepository;
 exports.OrgPermissionRepository = OrgPermissionRepository = __decorate([

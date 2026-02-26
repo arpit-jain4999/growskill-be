@@ -15,6 +15,7 @@ const cohorts_service_1 = require("./cohorts.service");
 const cohort_repository_1 = require("./repositories/cohort.repository");
 const cohort_schema_1 = require("./schemas/cohort.schema");
 const organizations_module_1 = require("../organizations/organizations.module");
+const permissions_module_1 = require("../permissions/permissions.module");
 let CohortsModule = class CohortsModule {
 };
 exports.CohortsModule = CohortsModule;
@@ -23,6 +24,7 @@ exports.CohortsModule = CohortsModule = __decorate([
         imports: [
             mongoose_1.MongooseModule.forFeature([{ name: cohort_schema_1.Cohort.name, schema: cohort_schema_1.CohortSchema }]),
             organizations_module_1.OrganizationsModule,
+            permissions_module_1.PermissionsModule,
         ],
         controllers: [cohorts_controller_1.CohortsController, admin_cohorts_controller_1.AdminCohortsController],
         providers: [cohorts_service_1.CohortsService, cohort_repository_1.CohortRepository],

@@ -26,56 +26,77 @@ const authorize_guard_1 = require("../common/guards/authorize.guard");
 const authorize_decorator_1 = require("../common/decorators/authorize.decorator");
 const current_actor_decorator_1 = require("../common/decorators/current-actor.decorator");
 const permissions_1 = require("../common/constants/permissions");
+const roles_1 = require("../common/constants/roles");
+const organizations_service_1 = require("../organizations/organizations.service");
 let AdminModulesController = class AdminModulesController {
-    constructor(modulesService) {
+    constructor(modulesService, organizationsService) {
         this.modulesService = modulesService;
+        this.organizationsService = organizationsService;
     }
-    async findAll(actor) {
-        return this.modulesService.findAllForAdmin(actor.organizationId);
+    async resolveOrgId(actor, request) {
+        let orgId = actor.organizationId ?? null;
+        if (!orgId && actor.role === roles_1.ROLES.PLATFORM_OWNER && request?.headers) {
+            const raw = request.headers['x-org-id'] ?? request.headers['X-Org-Id'];
+            const trimmed = typeof raw === 'string' ? raw.trim() : '';
+            if (trimmed) {
+                await this.organizationsService.findById(trimmed);
+                orgId = trimmed;
+            }
+        }
+        if (!orgId) {
+            throw new common_1.BadRequestException('x-org-id header required for this operation');
+        }
+        return orgId;
     }
-    async findOne(id, actor) {
-        return this.modulesService.findByIdForAdmin(id, actor.organizationId);
+    async findAll(actor, req) {
+        const orgId = await this.resolveOrgId(actor, req);
+        return this.modulesService.findAllForAdmin(orgId);
     }
-    async create(dto, actor) {
-        return this.modulesService.create(actor.organizationId, dto);
+    async findOne(id, actor, req) {
+        const orgId = await this.resolveOrgId(actor, req);
+        return this.modulesService.findByIdForAdmin(id, orgId);
     }
-    async update(id, dto, actor) {
-        return this.modulesService.update(id, actor.organizationId, dto);
+    async create(dto, actor, req) {
+        const orgId = await this.resolveOrgId(actor, req);
+        return this.modulesService.create(orgId, dto);
     }
-    async remove(id, actor) {
-        return this.modulesService.remove(id, actor.organizationId);
+    async update(id, dto, actor, req) {
+        const orgId = await this.resolveOrgId(actor, req);
+        return this.modulesService.update(id, orgId, dto);
+    }
+    async remove(id, actor, req) {
+        const orgId = await this.resolveOrgId(actor, req);
+        return this.modulesService.remove(id, orgId);
     }
 };
 exports.AdminModulesController = AdminModulesController;
 __decorate([
     (0, common_1.Get)('modules'),
-    (0, common_1.UseGuards)(authorize_guard_1.AuthorizeGuard),
-    (0, authorize_decorator_1.Authorize)(permissions_1.PERMISSIONS.MODULE_READ),
     (0, swagger_1.ApiOperation)({
         summary: '[Admin] Get all modules',
-        description: 'Tenant-scoped. Returns all modules (including inactive) for the organisation, sorted by display order.',
+        description: 'Tenant-scoped. Any authenticated user in the org can read. PLATFORM_OWNER must send x-org-id.',
     }),
     (0, swagger_1.ApiOkResponse)({ description: 'List of all modules. Response: `{ success: true, data: ModuleResponseDto[] }`', type: module_response_dto_1.ModuleListApiResponseDto }),
     (0, swagger_1.ApiUnauthorizedResponse)({ description: 'Missing or invalid JWT', type: error_response_dto_1.StandardErrorResponseDto }),
     (0, swagger_1.ApiForbiddenResponse)({ description: 'Missing permission or tenant context', type: error_response_dto_1.StandardErrorResponseDto }),
     __param(0, (0, current_actor_decorator_1.CurrentActor)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], AdminModulesController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)('modules/:id'),
-    (0, common_1.UseGuards)(authorize_guard_1.AuthorizeGuard),
-    (0, authorize_decorator_1.Authorize)(permissions_1.PERMISSIONS.MODULE_READ),
-    (0, swagger_1.ApiOperation)({ summary: '[Admin] Get module by ID', description: 'Tenant-scoped. Returns a single module by ID.' }),
+    (0, swagger_1.ApiOperation)({ summary: '[Admin] Get module by ID', description: 'Any authenticated user in the org can read. PLATFORM_OWNER must send x-org-id.' }),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'Module ID (MongoDB ObjectId)', example: '507f1f77bcf86cd799439011' }),
     (0, swagger_1.ApiOkResponse)({ description: 'Module found. Response: `{ success: true, data: ModuleResponseDto }`', type: module_response_dto_1.ModuleApiResponseDto }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Module not found', type: error_response_dto_1.StandardErrorResponseDto }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid module ID', type: error_response_dto_1.StandardErrorResponseDto }),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_actor_decorator_1.CurrentActor)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AdminModulesController.prototype, "findOne", null);
 __decorate([
@@ -84,7 +105,7 @@ __decorate([
     (0, authorize_decorator_1.Authorize)(permissions_1.PERMISSIONS.MODULE_CREATE),
     (0, swagger_1.ApiOperation)({
         summary: '[Admin] Create module',
-        description: 'Creates a new content module in the organisation. Optionally link to a course via courseId.',
+        description: 'Creates a new content module in the organisation. PLATFORM_OWNER must send x-org-id.',
     }),
     (0, swagger_1.ApiCreatedResponse)({ description: 'Module created. Response: `{ success: true, data: ModuleResponseDto }`', type: module_response_dto_1.ModuleApiResponseDto }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'Validation error', type: error_response_dto_1.StandardErrorResponseDto }),
@@ -92,15 +113,16 @@ __decorate([
     (0, swagger_1.ApiForbiddenResponse)({ description: 'Missing permission or tenant context', type: error_response_dto_1.StandardErrorResponseDto }),
     __param(0, (0, common_1.Body)()),
     __param(1, (0, current_actor_decorator_1.CurrentActor)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_module_dto_1.CreateModuleDto, Object]),
+    __metadata("design:paramtypes", [create_module_dto_1.CreateModuleDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AdminModulesController.prototype, "create", null);
 __decorate([
     (0, common_1.Patch)('module/:id'),
     (0, common_1.UseGuards)(authorize_guard_1.AuthorizeGuard),
     (0, authorize_decorator_1.Authorize)(permissions_1.PERMISSIONS.MODULE_UPDATE),
-    (0, swagger_1.ApiOperation)({ summary: '[Admin] Update module', description: 'Partially update a module. Only provided fields are changed.' }),
+    (0, swagger_1.ApiOperation)({ summary: '[Admin] Update module', description: 'Partially update a module. PLATFORM_OWNER must send x-org-id.' }),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'Module ID (MongoDB ObjectId)', example: '507f1f77bcf86cd799439011' }),
     (0, swagger_1.ApiOkResponse)({ description: 'Module updated. Response: `{ success: true, data: ModuleResponseDto }`', type: module_response_dto_1.ModuleApiResponseDto }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Module not found', type: error_response_dto_1.StandardErrorResponseDto }),
@@ -108,23 +130,25 @@ __decorate([
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, current_actor_decorator_1.CurrentActor)()),
+    __param(3, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, update_module_dto_1.UpdateModuleDto, Object]),
+    __metadata("design:paramtypes", [String, update_module_dto_1.UpdateModuleDto, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AdminModulesController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)('module/:id'),
     (0, common_1.UseGuards)(authorize_guard_1.AuthorizeGuard),
     (0, authorize_decorator_1.Authorize)(permissions_1.PERMISSIONS.MODULE_DELETE),
-    (0, swagger_1.ApiOperation)({ summary: '[Admin] Delete module', description: 'Permanently deletes a module from the organisation.' }),
+    (0, swagger_1.ApiOperation)({ summary: '[Admin] Delete module', description: 'Permanently deletes a module. PLATFORM_OWNER must send x-org-id.' }),
     (0, swagger_1.ApiParam)({ name: 'id', description: 'Module ID (MongoDB ObjectId)', example: '507f1f77bcf86cd799439011' }),
     (0, swagger_1.ApiOkResponse)({ description: 'Module deleted. Response: `{ success: true, data: ModuleResponseDto }`', type: module_response_dto_1.ModuleApiResponseDto }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Module not found', type: error_response_dto_1.StandardErrorResponseDto }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'Invalid module ID', type: error_response_dto_1.StandardErrorResponseDto }),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, current_actor_decorator_1.CurrentActor)()),
+    __param(2, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, Object, Object]),
     __metadata("design:returntype", Promise)
 ], AdminModulesController.prototype, "remove", null);
 exports.AdminModulesController = AdminModulesController = __decorate([
@@ -133,6 +157,7 @@ exports.AdminModulesController = AdminModulesController = __decorate([
     (0, swagger_1.ApiExtraModels)(module_response_dto_1.ModuleResponseDto, create_module_dto_1.CreateModuleDto, update_module_dto_1.UpdateModuleDto),
     (0, common_1.Controller)('v1/admin'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, tenant_context_guard_1.TenantContextGuard, tenant_context_guard_1.RequireTenantGuard),
-    __metadata("design:paramtypes", [modules_service_1.ModulesService])
+    __metadata("design:paramtypes", [modules_service_1.ModulesService,
+        organizations_service_1.OrganizationsService])
 ], AdminModulesController);
 //# sourceMappingURL=admin-modules.controller.js.map

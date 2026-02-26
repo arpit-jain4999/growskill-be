@@ -16,6 +16,7 @@ const module_repository_1 = require("./repositories/module.repository");
 const module_schema_1 = require("./schemas/module.schema");
 const organizations_module_1 = require("../organizations/organizations.module");
 const chapters_module_1 = require("../chapters/chapters.module");
+const permissions_module_1 = require("../permissions/permissions.module");
 let ModulesModule = class ModulesModule {
 };
 exports.ModulesModule = ModulesModule;
@@ -25,6 +26,7 @@ exports.ModulesModule = ModulesModule = __decorate([
             mongoose_1.MongooseModule.forFeature([{ name: module_schema_1.Module.name, schema: module_schema_1.ModuleSchema }]),
             organizations_module_1.OrganizationsModule,
             chapters_module_1.ChaptersModule,
+            permissions_module_1.PermissionsModule,
         ],
         controllers: [modules_controller_1.ModulesController, admin_modules_controller_1.AdminModulesController],
         providers: [modules_service_1.ModulesService, module_repository_1.ModuleRepository],

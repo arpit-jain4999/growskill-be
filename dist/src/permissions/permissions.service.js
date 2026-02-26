@@ -33,6 +33,11 @@ let PermissionsService = class PermissionsService {
     async getOrgPermissions(organizationId) {
         return this.orgPermRepo.findKeysByOrg(organizationId);
     }
+    async deleteAllForOrganization(organizationId) {
+        await this.orgPermRepo.deleteAllByOrg(organizationId);
+        await this.userPermRepo.deleteAllByOrg(organizationId);
+        this.logger.log(`Deleted all permissions for org ${organizationId}`);
+    }
     async syncOrgPermissionsForModule(organizationId, moduleKey, enable, userId) {
         const perms = permissions_1.MODULE_PERMISSIONS[moduleKey];
         if (!perms || perms.length === 0)

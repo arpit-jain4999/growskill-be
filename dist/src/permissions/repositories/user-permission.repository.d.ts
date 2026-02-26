@@ -8,4 +8,5 @@ export declare class UserPermissionRepository {
     grant(organizationId: string, userId: string, permissionKeys: string[], grantedBy: string): Promise<number>;
     revoke(organizationId: string, userId: string, permissionKeys: string[]): Promise<number>;
     replaceAll(organizationId: string, userId: string, permissionKeys: string[], grantedBy: string): Promise<void>;
+    deleteAllByOrg(organizationId: string): Promise<number>;
 }

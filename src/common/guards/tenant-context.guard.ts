@@ -9,6 +9,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { Actor } from '../types/actor';
+import { ROLES } from '../constants/roles';
 
 export const TENANT_RESOLVER = 'TENANT_RESOLVER';
 
@@ -72,13 +73,21 @@ export class TenantContextGuard implements CanActivate {
 
 /**
  * Use on tenant-scoped routes: requires actor to have an organizationId.
+ * PLATFORM_OWNER is always allowed through (all permissions enabled by default);
+ * handlers that need org must check actor.organizationId and return 400 if missing.
  */
 @Injectable()
 export class RequireTenantGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const actor: Actor | undefined = request.actor;
-    if (!actor?.organizationId) {
+    if (!actor) {
+      throw new ForbiddenException('Tenant context required for this action');
+    }
+    if (actor.role === ROLES.PLATFORM_OWNER) {
+      return true;
+    }
+    if (!actor.organizationId) {
       throw new ForbiddenException('Tenant context required for this action');
     }
     return true;

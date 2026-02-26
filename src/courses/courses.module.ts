@@ -6,11 +6,13 @@ import { CoursesService } from './courses.service';
 import { CourseRepository } from './repositories/course.repository';
 import { Course, CourseSchema } from './schemas/course.schema';
 import { OrganizationsModule } from '../organizations/organizations.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Course.name, schema: CourseSchema }]),
     OrganizationsModule,
+    PermissionsModule,
   ],
   controllers: [CoursesController, AdminCoursesController],
   providers: [CoursesService, CourseRepository],

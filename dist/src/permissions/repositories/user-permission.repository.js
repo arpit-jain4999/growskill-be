@@ -87,6 +87,12 @@ let UserPermissionRepository = class UserPermissionRepository {
         }));
         await this.model.insertMany(docs);
     }
+    async deleteAllByOrg(organizationId) {
+        const result = await this.model.deleteMany({
+            organizationId: new mongoose_2.Types.ObjectId(organizationId),
+        });
+        return result.deletedCount ?? 0;
+    }
 };
 exports.UserPermissionRepository = UserPermissionRepository;
 exports.UserPermissionRepository = UserPermissionRepository = __decorate([

@@ -36,6 +36,16 @@ export class PermissionsService {
   }
 
   /**
+   * Delete all org-level and user-level permissions for an organization.
+   * Used when deleting an organization (cascade).
+   */
+  async deleteAllForOrganization(organizationId: string): Promise<void> {
+    await this.orgPermRepo.deleteAllByOrg(organizationId);
+    await this.userPermRepo.deleteAllByOrg(organizationId);
+    this.logger.log(`Deleted all permissions for org ${organizationId}`);
+  }
+
+  /**
    * Sync OrgPermission rows when a feature module is enabled/disabled.
    * Called by OrganizationsService.enableModule / disableModule.
    */

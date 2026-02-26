@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -140,6 +141,17 @@ export class PlatformController {
   ) {
     this.ensurePlatformOwner(actor);
     return this.organizationsService.update(orgId, dto);
+  }
+
+  @Delete(':orgId')
+  @ApiOperation({
+    summary: 'Delete organization',
+    description: 'Permanently deletes the organization and all associated data (users, cohorts, courses, modules, chapters, orders, permissions). PLATFORM_OWNER only.',
+  })
+  async delete(@Param('orgId') orgId: string, @CurrentActor() actor: Actor) {
+    this.ensurePlatformOwner(actor);
+    await this.organizationsService.remove(orgId);
+    return { deleted: orgId };
   }
 
   @Post(':orgId/super-admin')

@@ -6,6 +6,11 @@ import {
   OrganizationModuleSchema,
 } from './schemas/organization-module.schema';
 import { User, UserSchema } from '../auth/schemas/user.schema';
+import { Order, OrderSchema } from '../orders/schemas/order.schema';
+import { Cohort, CohortSchema } from '../cohorts/schemas/cohort.schema';
+import { Course, CourseSchema } from '../courses/schemas/course.schema';
+import { Module as ContentModule, ModuleSchema as ContentModuleSchema } from '../modules/schemas/module.schema';
+import { Chapter, ChapterSchema } from '../chapters/schemas/chapter.schema';
 import { OrganizationRepository } from './repositories/organization.repository';
 import { OrganizationModuleRepository } from './repositories/organization-module.repository';
 import { OrganizationsService } from './organizations.service';
@@ -29,6 +34,11 @@ import { PermissionsModule } from '../permissions/permissions.module';
       { name: Organization.name, schema: OrganizationSchema },
       { name: OrgModuleEntity.name, schema: OrganizationModuleSchema },
       { name: User.name, schema: UserSchema },
+      { name: Order.name, schema: OrderSchema },
+      { name: Cohort.name, schema: CohortSchema },
+      { name: Course.name, schema: CourseSchema },
+      { name: ContentModule.name, schema: ContentModuleSchema },
+      { name: Chapter.name, schema: ChapterSchema },
     ]),
   ],
   controllers: [PlatformController, OrgAdminController],

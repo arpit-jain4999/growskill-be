@@ -68,6 +68,12 @@ let OrganizationModuleRepository = class OrganizationModuleRepository {
         });
         return !!doc;
     }
+    async deleteByOrg(organizationId) {
+        const result = await this.model.deleteMany({
+            organizationId: new mongoose_2.Types.ObjectId(organizationId),
+        });
+        return result.deletedCount ?? 0;
+    }
 };
 exports.OrganizationModuleRepository = OrganizationModuleRepository;
 exports.OrganizationModuleRepository = OrganizationModuleRepository = __decorate([
