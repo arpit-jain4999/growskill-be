@@ -1,5 +1,6 @@
-import { Controller, Post, Body, Get, Param, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiOkResponse, ApiNotFoundResponse, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, Param, UseGuards, Req } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiNotFoundResponse, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiParam, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import type { FastifyRequest } from 'fastify';
 import { FilesService } from './files.service';
 import { InitiateUploadDto, CompleteUploadDto, TestUploadDto } from './dto/upload-file.dto';
 import { InitiateUploadResponseDto, CompleteUploadResponseDto, TestUploadResponseDto, FileInfoResponseDto } from './dto/file-response.dto';
@@ -45,6 +46,22 @@ export class FilesController {
   })
   async completeUpload(@Body() dto: CompleteUploadDto) {
     return this.filesService.completeUpload(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('upload/direct')
+  @ApiBearerAuth('JWT-auth')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Upload file directly (local disk)',
+    description:
+      'Writes the file to storage/uploads and returns the same shape as upload/complete. Required for local HLS transcoding when objects are not on S3. Optional fields: folder, moduleId, chapterId (send before file).',
+  })
+  @ApiOkResponse({ description: 'File saved', type: CompleteUploadResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT', type: StandardErrorResponseDto })
+  @ApiBadRequestResponse({ description: 'Not multipart or no file', type: StandardErrorResponseDto })
+  async uploadDirect(@Req() req: FastifyRequest) {
+    return this.filesService.uploadMultipartDirect(req);
   }
 
   @UseGuards(JwtAuthGuard)

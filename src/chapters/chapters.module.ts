@@ -16,6 +16,6 @@ import { PermissionsModule } from '../permissions/permissions.module';
   ],
   controllers: [ChaptersController, AdminChaptersController],
   providers: [ChaptersService, ChapterRepository],
-  exports: [ChaptersService],
+  exports: [ChaptersService, ChapterRepository],
 })
 export class ChaptersModule {}

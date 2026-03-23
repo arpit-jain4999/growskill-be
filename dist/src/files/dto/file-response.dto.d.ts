@@ -18,6 +18,9 @@ export declare class InitiateUploadResponseDto {
 export declare class CompleteUploadResponseDto {
     fileId: string;
     file: FileInfoResponseDto;
+    videoProcessingId?: string;
+    hlsMasterUrl?: string;
+    videoProcessingStatus?: 'pending' | 'failed_to_enqueue';
 }
 export declare class TestUploadResponseDto {
     uploadId: string;

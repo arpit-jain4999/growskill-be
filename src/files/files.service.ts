@@ -1,27 +1,47 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
+import type { FastifyRequest } from 'fastify';
+import * as fs from 'fs';
+import * as path from 'path';
+import { pipeline } from 'stream/promises';
 import { FileRepository } from './repositories/file.repository';
 import { LoggerService } from '../common/services/logger.service';
 import { InitiateUploadDto, CompleteUploadDto, TestUploadDto } from './dto/upload-file.dto';
+import { VideoProcessingService } from '../video-processing/video-processing.service';
 import { randomUUID } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class FilesService {
-  private readonly baseUrl: string;
   private readonly bucketName: string;
-  private uploadSessions: Map<string, { fileKey: string; mimeType: string; callbackUrl?: string }> = new Map();
+  private uploadSessions: Map<
+    string,
+    { fileKey: string; mimeType: string; callbackUrl?: string; chapterId?: string; moduleId?: string }
+  > = new Map();
 
   constructor(
     private fileRepository: FileRepository,
     private configService: ConfigService,
     private logger: LoggerService,
     private httpService: HttpService,
+    @Inject(forwardRef(() => VideoProcessingService))
+    private videoProcessingService: VideoProcessingService,
   ) {
     this.logger.setContext('FilesService');
-    this.baseUrl = this.configService.get<string>('FILE_BASE_URL') || 'https://storage.example.com';
     this.bucketName = this.configService.get<string>('FILE_BUCKET_NAME') || 'skillgroww-files';
+  }
+
+  /**
+   * Public base URL for stored objects (used in imgUrl). Empty/placeholder FILE_BASE_URL → local /uploads.
+   */
+  resolvePublicFileBaseUrl(): string {
+    const fb = (this.configService.get<string>('FILE_BASE_URL') ?? '').trim();
+    if (fb && !/storage\.example\.com/i.test(fb)) {
+      return fb.replace(/\/$/, '');
+    }
+    const port = this.configService.get<number>('PORT') || 3000;
+    return `http://localhost:${port}/uploads`;
   }
 
   /**
@@ -47,11 +67,13 @@ export class FilesService {
     // Generate signed URL for multipart upload
     const signedUrl = await this.generateSignedUrl(fileKey, dto.mimeType);
 
-    // Store upload session with callback URL if provided
+    // Store upload session: optional chapterId and/or moduleId tie HLS output to content after transcode
     this.uploadSessions.set(uploadId, {
       fileKey,
       mimeType: dto.mimeType,
       callbackUrl: dto.callbackUrl,
+      chapterId: dto.chapterId,
+      moduleId: dto.moduleId,
     });
 
     return {
@@ -77,9 +99,23 @@ export class FilesService {
     //   Expires: 3600,
     // });
 
-    // Placeholder implementation
-    const baseUrl = this.baseUrl;
-    return `${baseUrl}/upload?key=${fileKey}&mimeType=${mimeType}`;
+    // Placeholder implementation (real S3 would return a presigned PUT URL)
+    const origin = this.resolveAppOrigin();
+    return `${origin}/fake-upload?key=${encodeURIComponent(fileKey)}&mimeType=${encodeURIComponent(mimeType)}`;
+  }
+
+  /** Origin for synthetic signed URLs (not the same as public file CDN base). */
+  private resolveAppOrigin(): string {
+    const fb = (this.configService.get<string>('FILE_BASE_URL') ?? '').trim();
+    if (fb && !/storage\.example\.com/i.test(fb)) {
+      try {
+        return new URL(fb).origin;
+      } catch {
+        /* use localhost */
+      }
+    }
+    const port = this.configService.get<number>('PORT') || 3000;
+    return `http://localhost:${port}`;
   }
 
   /**
@@ -103,18 +139,41 @@ export class FilesService {
     // For now, we'll create the file record
 
     const fileName = dto.fileKey.split('/').pop() || 'file';
+    const publicBase = this.resolvePublicFileBaseUrl();
     const fileInfo = await this.fileRepository.create({
       name: fileName,
       key: dto.fileKey,
-      baseUrl: this.baseUrl,
-      imgUrl: `${this.baseUrl}/${dto.fileKey}`,
+      baseUrl: publicBase,
+      imgUrl: `${publicBase}/${dto.fileKey}`,
       mimeType: uploadSession.mimeType,
       size: dto.fileSize ? parseInt(dto.fileSize, 10) : undefined,
     });
 
+    // All video uploads: enqueue HLS transcoding. Optional chapterId / moduleId receive the master URL when done.
+    const isVideo = uploadSession.mimeType.startsWith('video/');
+    let videoProcessingId: string | undefined;
+    let hlsMasterUrl: string | undefined;
+    if (isVideo) {
+      try {
+        const result = await this.videoProcessingService.startTranscode({
+          sourceFileId: fileInfo._id.toString(),
+          chapterId: uploadSession.chapterId,
+          moduleId: uploadSession.moduleId,
+        });
+        videoProcessingId = result.videoProcessingId;
+        hlsMasterUrl = result.hlsMasterUrl;
+      } catch (err: any) {
+        this.logger.error(`Failed to enqueue video processing: ${err?.message}`);
+      }
+    }
+
     // Trigger callback if provided
     if (uploadSession.callbackUrl) {
-      await this.triggerCallback(uploadSession.callbackUrl, fileInfo);
+      await this.triggerCallback(uploadSession.callbackUrl, fileInfo, {
+        ...(videoProcessingId && { videoProcessingId }),
+        ...(hlsMasterUrl && { hlsMasterUrl }),
+        ...(isVideo && { videoProcessingStatus: videoProcessingId ? 'pending' : 'failed_to_enqueue' }),
+      });
     }
 
     // Clean up upload session
@@ -123,13 +182,26 @@ export class FilesService {
     return {
       fileId: fileInfo._id.toString(),
       file: fileInfo,
+      ...(videoProcessingId && {
+        videoProcessingId,
+        hlsMasterUrl,
+        videoProcessingStatus: 'pending' as const,
+      }),
     };
   }
 
   /**
    * Trigger callback URL after upload completion
    */
-  private async triggerCallback(callbackUrl: string, fileInfo: any) {
+  private async triggerCallback(
+    callbackUrl: string,
+    fileInfo: any,
+    videoMeta?: {
+      videoProcessingId?: string;
+      hlsMasterUrl?: string;
+      videoProcessingStatus?: string;
+    },
+  ) {
     try {
       this.logger.log(`Triggering callback to: ${callbackUrl}`);
       
@@ -146,6 +218,7 @@ export class FilesService {
           createdAt: fileInfo.createdAt,
           updatedAt: fileInfo.updatedAt,
         },
+        ...videoMeta,
       };
 
       await firstValueFrom(
@@ -189,6 +262,97 @@ export class FilesService {
         uploadId: initiateResult.uploadId,
         fileKey: initiateResult.fileKey,
       },
+    };
+  }
+
+  /**
+   * Save multipart upload to disk under storage/uploads and create FileInfo (recommended for local dev & HLS source).
+   * Form fields (optional): folder, moduleId, chapterId — send them before the file part for correct folder routing.
+   */
+  async uploadMultipartDirect(req: FastifyRequest) {
+    if (typeof req.isMultipart !== 'function' || !req.isMultipart()) {
+      const ct = String(req.headers['content-type'] ?? '');
+      const jsonHint = ct.includes('application/json')
+        ? ' You sent application/json; this route does not accept JSON. Send multipart/form-data with a real file binary in a part named "file". Example: curl -F "folder=chapters/videos" -F "chapterId=YOUR_ID" -F "file=@/path/to/video.mp4" -H "Authorization: Bearer TOKEN" http://localhost:8080/v1/files/upload/direct'
+        : '';
+      throw new BadRequestException(
+        `Expected multipart/form-data with a part named "file" (binary upload).${jsonHint}`,
+      );
+    }
+
+    let folder = 'uploads';
+    let moduleId: string | undefined;
+    let chapterId: string | undefined;
+    let wroteFile = false;
+    let fileKey = '';
+    let originalName = 'upload.bin';
+    let mimeType = 'application/octet-stream';
+    let size = 0;
+
+    const uploadsRoot = path.join(process.cwd(), 'storage', 'uploads');
+
+    for await (const part of req.parts()) {
+      if (part.type === 'field') {
+        const v = String(part.value ?? '').trim();
+        if (part.fieldname === 'folder' && v) folder = v;
+        if (part.fieldname === 'moduleId' && v) moduleId = v;
+        if (part.fieldname === 'chapterId' && v) chapterId = v;
+      } else if (part.type === 'file') {
+        if (wroteFile) {
+          part.file.resume();
+          continue;
+        }
+        originalName = part.filename || originalName;
+        mimeType = part.mimetype || mimeType;
+        fileKey = this.generateFileKey(originalName, folder);
+        const destPath = path.join(uploadsRoot, fileKey);
+        fs.mkdirSync(path.dirname(destPath), { recursive: true });
+        await pipeline(part.file, fs.createWriteStream(destPath));
+        size = fs.statSync(destPath).size;
+        wroteFile = true;
+      }
+    }
+
+    if (!wroteFile || !fileKey) {
+      throw new BadRequestException('No file field received (use field name "file" in multipart)');
+    }
+
+    const publicBase = this.resolvePublicFileBaseUrl();
+    const storedName = fileKey.split('/').pop() || originalName;
+    const fileInfo = await this.fileRepository.create({
+      name: storedName,
+      key: fileKey,
+      baseUrl: publicBase,
+      imgUrl: `${publicBase}/${fileKey}`,
+      mimeType,
+      size,
+    });
+
+    const isVideo = mimeType.startsWith('video/');
+    let videoProcessingId: string | undefined;
+    let hlsMasterUrl: string | undefined;
+    if (isVideo) {
+      try {
+        const result = await this.videoProcessingService.startTranscode({
+          sourceFileId: fileInfo._id.toString(),
+          chapterId,
+          moduleId,
+        });
+        videoProcessingId = result.videoProcessingId;
+        hlsMasterUrl = result.hlsMasterUrl;
+      } catch (err: any) {
+        this.logger.error(`Failed to enqueue video processing: ${err?.message}`);
+      }
+    }
+
+    return {
+      fileId: fileInfo._id.toString(),
+      file: fileInfo,
+      ...(videoProcessingId && {
+        videoProcessingId,
+        hlsMasterUrl,
+        videoProcessingStatus: 'pending' as const,
+      }),
     };
   }
 

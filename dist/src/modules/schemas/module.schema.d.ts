@@ -7,6 +7,9 @@ export declare class Module {
     courseId?: Types.ObjectId;
     order: number;
     isActive: boolean;
+    content?: string;
+    videoUrl?: string;
+    duration?: number;
 }
 export declare const ModuleSchema: import("mongoose").Schema<Module, import("mongoose").Model<Module, any, any, any, (Document<unknown, any, Module, any, import("mongoose").DefaultSchemaOptions> & Module & {
     _id: Types.ObjectId;
@@ -73,6 +76,33 @@ export declare const ModuleSchema: import("mongoose").Schema<Module, import("mon
         id: string;
     }>;
     isActive?: import("mongoose").SchemaDefinitionProperty<boolean, Module, Document<unknown, {}, Module, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Module & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    content?: import("mongoose").SchemaDefinitionProperty<string, Module, Document<unknown, {}, Module, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Module & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    videoUrl?: import("mongoose").SchemaDefinitionProperty<string, Module, Document<unknown, {}, Module, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Module & {
+        _id: Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    duration?: import("mongoose").SchemaDefinitionProperty<number, Module, Document<unknown, {}, Module, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Module & {
         _id: Types.ObjectId;

@@ -21,6 +21,16 @@ export class InitiateUploadDto {
   @IsUrl()
   @IsOptional()
   callbackUrl?: string; // Optional callback URL to notify when upload is complete
+
+  @ApiPropertyOptional({ example: '507f1f77bcf86cd799439011', description: 'Chapter ID to attach the processed HLS video URL to (for video uploads only). Optional if moduleId is used instead.' })
+  @IsString()
+  @IsOptional()
+  chapterId?: string;
+
+  @ApiPropertyOptional({ example: '507f1f77bcf86cd799439012', description: 'Module ID: when set for a video upload, the HLS master URL is written to this module\'s videoUrl after transcoding (no chapter required).' })
+  @IsString()
+  @IsOptional()
+  moduleId?: string;
 }
 
 export class CompleteUploadDto {

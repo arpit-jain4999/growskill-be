@@ -49,6 +49,15 @@ export class CompleteUploadResponseDto {
 
   @ApiProperty({ type: FileInfoResponseDto })
   file: FileInfoResponseDto;
+
+  @ApiPropertyOptional({ example: '507f1f77bcf86cd799439012', description: 'Present for video uploads; poll GET /v1/videos/processing/:id until status is completed' })
+  videoProcessingId?: string;
+
+  @ApiPropertyOptional({ example: 'https://api.example.com/hls/507f1f77bcf86cd799439012/master.m3u8', description: 'HLS master playlist URL (stable immediately; playable after transcoding completes)' })
+  hlsMasterUrl?: string;
+
+  @ApiPropertyOptional({ example: 'pending', description: 'Video transcode state: pending until completed/failed' })
+  videoProcessingStatus?: 'pending' | 'failed_to_enqueue';
 }
 
 export class TestUploadResponseDto {

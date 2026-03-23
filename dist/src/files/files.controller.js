@@ -31,6 +31,9 @@ let FilesController = class FilesController {
     async completeUpload(dto) {
         return this.filesService.completeUpload(dto);
     }
+    async uploadDirect(req) {
+        return this.filesService.uploadMultipartDirect(req);
+    }
     async testUpload(dto) {
         return this.filesService.testUpload(dto);
     }
@@ -78,6 +81,23 @@ __decorate([
     __metadata("design:paramtypes", [upload_file_dto_1.CompleteUploadDto]),
     __metadata("design:returntype", Promise)
 ], FilesController.prototype, "completeUpload", null);
+__decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.Post)('upload/direct'),
+    (0, swagger_1.ApiBearerAuth)('JWT-auth'),
+    (0, swagger_1.ApiConsumes)('multipart/form-data'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Upload file directly (local disk)',
+        description: 'Writes the file to storage/uploads and returns the same shape as upload/complete. Required for local HLS transcoding when objects are not on S3. Optional fields: folder, moduleId, chapterId (send before file).',
+    }),
+    (0, swagger_1.ApiOkResponse)({ description: 'File saved', type: file_response_dto_1.CompleteUploadResponseDto }),
+    (0, swagger_1.ApiUnauthorizedResponse)({ description: 'Missing or invalid JWT', type: error_response_dto_1.StandardErrorResponseDto }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Not multipart or no file', type: error_response_dto_1.StandardErrorResponseDto }),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], FilesController.prototype, "uploadDirect", null);
 __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Post)('upload/test'),

@@ -1,3 +1,4 @@
+import type { FastifyRequest } from 'fastify';
 import { FilesService } from './files.service';
 import { InitiateUploadDto, CompleteUploadDto, TestUploadDto } from './dto/upload-file.dto';
 export declare class FilesController {
@@ -10,6 +11,16 @@ export declare class FilesController {
         expiresIn: number;
     }>;
     completeUpload(dto: CompleteUploadDto): Promise<{
+        videoProcessingId: string;
+        hlsMasterUrl: string;
+        videoProcessingStatus: "pending";
+        fileId: string;
+        file: import("../common/schemas/file.schema").FileInfoDocument;
+    }>;
+    uploadDirect(req: FastifyRequest): Promise<{
+        videoProcessingId: string;
+        hlsMasterUrl: string;
+        videoProcessingStatus: "pending";
         fileId: string;
         file: import("../common/schemas/file.schema").FileInfoDocument;
     }>;

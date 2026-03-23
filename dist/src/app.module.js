@@ -26,6 +26,7 @@ const orders_module_1 = require("./orders/orders.module");
 const files_module_1 = require("./files/files.module");
 const permissions_module_1 = require("./permissions/permissions.module");
 const organizations_module_1 = require("./organizations/organizations.module");
+const video_processing_module_1 = require("./video-processing/video-processing.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logging_middleware_1.LoggingMiddleware).forRoutes('*');
@@ -72,6 +73,7 @@ exports.AppModule = AppModule = __decorate([
             chapters_module_1.ChaptersModule,
             orders_module_1.OrdersModule,
             files_module_1.FilesModule,
+            video_processing_module_1.VideoProcessingModule,
             permissions_module_1.PermissionsModule,
             organizations_module_1.OrganizationsModule,
         ],

@@ -18,6 +18,6 @@ import { PermissionsModule } from '../permissions/permissions.module';
   ],
   controllers: [ModulesController, AdminModulesController],
   providers: [ModulesService, ModuleRepository],
-  exports: [ModulesService],
+  exports: [ModulesService, ModuleRepository],
 })
 export class ModulesModule {}

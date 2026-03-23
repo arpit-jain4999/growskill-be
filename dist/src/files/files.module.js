@@ -14,6 +14,7 @@ const files_controller_1 = require("./files.controller");
 const files_service_1 = require("./files.service");
 const file_repository_1 = require("./repositories/file.repository");
 const file_schema_1 = require("../common/schemas/file.schema");
+const video_processing_module_1 = require("../video-processing/video-processing.module");
 let FilesModule = class FilesModule {
 };
 exports.FilesModule = FilesModule;
@@ -24,10 +25,11 @@ exports.FilesModule = FilesModule = __decorate([
                 { name: file_schema_1.FileInfo.name, schema: file_schema_1.FileInfoSchema },
             ]),
             axios_1.HttpModule,
+            (0, common_1.forwardRef)(() => video_processing_module_1.VideoProcessingModule),
         ],
         controllers: [files_controller_1.FilesController],
         providers: [files_service_1.FilesService, file_repository_1.FileRepository],
-        exports: [files_service_1.FilesService],
+        exports: [files_service_1.FilesService, file_repository_1.FileRepository],
     })
 ], FilesModule);
 //# sourceMappingURL=files.module.js.map

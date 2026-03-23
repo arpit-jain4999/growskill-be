@@ -30,7 +30,7 @@ exports.ModulesModule = ModulesModule = __decorate([
         ],
         controllers: [modules_controller_1.ModulesController, admin_modules_controller_1.AdminModulesController],
         providers: [modules_service_1.ModulesService, module_repository_1.ModuleRepository],
-        exports: [modules_service_1.ModulesService],
+        exports: [modules_service_1.ModulesService, module_repository_1.ModuleRepository],
     })
 ], ModulesModule);
 //# sourceMappingURL=modules.module.js.map

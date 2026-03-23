@@ -28,7 +28,7 @@ exports.ChaptersModule = ChaptersModule = __decorate([
         ],
         controllers: [chapters_controller_1.ChaptersController, admin_chapters_controller_1.AdminChaptersController],
         providers: [chapters_service_1.ChaptersService, chapter_repository_1.ChapterRepository],
-        exports: [chapters_service_1.ChaptersService],
+        exports: [chapters_service_1.ChaptersService, chapter_repository_1.ChapterRepository],
     })
 ], ChaptersModule);
 //# sourceMappingURL=chapters.module.js.map

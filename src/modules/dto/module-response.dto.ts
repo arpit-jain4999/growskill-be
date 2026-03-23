@@ -22,6 +22,15 @@ export class ModuleResponseDto {
   @ApiProperty({ example: true, description: 'Whether the module is active / visible', type: Boolean })
   isActive: boolean;
 
+  @ApiPropertyOptional({ example: 'Module text or HTML content', description: 'Rich-text / HTML content for the module', type: String })
+  content?: string;
+
+  @ApiPropertyOptional({ example: 'https://storage.example.com/modules/videos/intro.mp4', description: 'URL of the video associated with this module', type: String })
+  videoUrl?: string;
+
+  @ApiPropertyOptional({ example: 600, description: 'Video duration in seconds', type: Number })
+  duration?: number;
+
   @ApiProperty({ example: '2024-01-15T10:00:00.000Z', description: 'Creation timestamp', type: String })
   createdAt: string;
 

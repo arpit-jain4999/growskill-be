@@ -26,4 +26,19 @@ export class CreateModuleDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ example: 'Module text or HTML content', description: 'Rich-text / HTML content for the module' })
+  @IsString()
+  @IsOptional()
+  content?: string;
+
+  @ApiPropertyOptional({ example: 'https://storage.example.com/modules/videos/intro.mp4', description: 'URL of the video associated with this module' })
+  @IsString()
+  @IsOptional()
+  videoUrl?: string;
+
+  @ApiPropertyOptional({ example: 600, description: 'Video duration in seconds' })
+  @IsNumber()
+  @IsOptional()
+  duration?: number;
 }

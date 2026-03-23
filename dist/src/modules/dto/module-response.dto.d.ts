@@ -6,6 +6,9 @@ export declare class ModuleResponseDto {
     courseId?: string;
     order: number;
     isActive: boolean;
+    content?: string;
+    videoUrl?: string;
+    duration?: number;
     createdAt: string;
     updatedAt: string;
 }

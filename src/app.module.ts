@@ -17,6 +17,7 @@ import { OrdersModule } from './orders/orders.module';
 import { FilesModule } from './files/files.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { OrganizationsModule } from './organizations/organizations.module';
+import { VideoProcessingModule } from './video-processing/video-processing.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { OrganizationsModule } from './organizations/organizations.module';
     ChaptersModule,
     OrdersModule,
     FilesModule,
+    VideoProcessingModule,
     PermissionsModule,
     OrganizationsModule,
   ],

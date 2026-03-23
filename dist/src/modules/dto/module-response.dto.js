@@ -43,6 +43,18 @@ __decorate([
     __metadata("design:type", Boolean)
 ], ModuleResponseDto.prototype, "isActive", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: 'Module text or HTML content', description: 'Rich-text / HTML content for the module', type: String }),
+    __metadata("design:type", String)
+], ModuleResponseDto.prototype, "content", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: 'https://storage.example.com/modules/videos/intro.mp4', description: 'URL of the video associated with this module', type: String }),
+    __metadata("design:type", String)
+], ModuleResponseDto.prototype, "videoUrl", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: 600, description: 'Video duration in seconds', type: Number }),
+    __metadata("design:type", Number)
+], ModuleResponseDto.prototype, "duration", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ example: '2024-01-15T10:00:00.000Z', description: 'Creation timestamp', type: String }),
     __metadata("design:type", String)
 ], ModuleResponseDto.prototype, "createdAt", void 0);

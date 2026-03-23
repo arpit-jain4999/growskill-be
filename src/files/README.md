@@ -9,6 +9,25 @@ This module handles file uploads with multipart upload support, signed URL gener
 - Callback URL support for upload completion notifications
 - File metadata storage
 - Backend testing endpoint
+- **Video:** automatic HLS transcoding on upload complete; optional **`moduleId`** or **`chapterId`** to attach the finished HLS URL to a module or chapter
+
+## Video without a “chapter” screen in admin
+
+The backend already supports **module-level video** (`Module.videoUrl`). If the admin app edits modules but has no chapter UI:
+
+1. On **initiate upload**, send the current module’s id as **`moduleId`** (with `mimeType` like `video/mp4`).
+2. On **complete**, the API returns **`hlsMasterUrl`** and **`videoProcessingId`** immediately (playlist URL is stable; segments exist after transcoding finishes).
+3. When transcoding completes, the API **updates that module’s `videoUrl`** to the HLS master URL automatically.
+
+Optional: to use **chapters** instead, call **`POST /v1/admin/chapter`** with `moduleId` + `title`, then pass the returned chapter id as **`chapterId`** on upload initiate so **`Chapter.videoUrl`** is set when done.
+
+Env: set **`HLS_PUBLIC_BASE_URL`** or **`PUBLIC_APP_URL`** to the origin where **`/hls/...`** is served (your API or CloudFront in front of it).
+
+### Local dev: `ENOTFOUND storage.example.com` / transcoding fails
+
+- Empty **`FILE_BASE_URL`** now defaults to **`http://localhost:{PORT}/uploads`** (not `storage.example.com`).
+- Use **`POST /v1/files/upload/direct`** (multipart: `folder`, optional `moduleId` / `chapterId`, then **`file`**) so the binary is saved under **`storage/uploads`** and served at **`/uploads/...`**. The HLS worker reads from disk first, then falls back to HTTP.
+- Set a real **`FILE_BASE_URL`** (e.g. CloudFront) in production when objects live on S3.
 
 ## API Endpoints
 

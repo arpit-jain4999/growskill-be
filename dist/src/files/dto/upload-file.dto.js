@@ -39,6 +39,18 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], InitiateUploadDto.prototype, "callbackUrl", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: '507f1f77bcf86cd799439011', description: 'Chapter ID to attach the processed HLS video URL to (for video uploads only). Optional if moduleId is used instead.' }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], InitiateUploadDto.prototype, "chapterId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: '507f1f77bcf86cd799439012', description: 'Module ID: when set for a video upload, the HLS master URL is written to this module\'s videoUrl after transcoding (no chapter required).' }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], InitiateUploadDto.prototype, "moduleId", void 0);
 class CompleteUploadDto {
 }
 exports.CompleteUploadDto = CompleteUploadDto;

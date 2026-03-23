@@ -3,6 +3,8 @@ export declare class InitiateUploadDto {
     mimeType: string;
     folder?: string;
     callbackUrl?: string;
+    chapterId?: string;
+    moduleId?: string;
 }
 export declare class CompleteUploadDto {
     uploadId: string;

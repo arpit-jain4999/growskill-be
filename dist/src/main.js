@@ -5,11 +5,15 @@ const platform_fastify_1 = require("@nestjs/platform-fastify");
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const swagger_1 = require("@nestjs/swagger");
+const path = require("path");
+const fs = require("fs");
+const static_1 = require("@fastify/static");
+const multipart_1 = require("@fastify/multipart");
 const app_module_1 = require("./app.module");
 const http_exception_filter_1 = require("./common/filters/http-exception.filter");
 const logger_service_1 = require("./common/services/logger.service");
 const transform_response_interceptor_1 = require("./common/interceptors/transform-response.interceptor");
-const CORS_ORIGIN = 'https://dev-admin.skillgroww.com';
+const CORS_ORIGIN = 'http://localhost:3000';
 function addCorsHeaders(reply) {
     reply.header('Access-Control-Allow-Origin', CORS_ORIGIN);
     reply.header('Access-Control-Allow-Credentials', 'true');
@@ -19,6 +23,9 @@ function addCorsHeaders(reply) {
 async function bootstrap() {
     const adapter = new platform_fastify_1.FastifyAdapter();
     const fastify = adapter.getInstance();
+    await fastify.register(multipart_1.default, {
+        limits: { fileSize: 512 * 1024 * 1024 },
+    });
     fastify.options('/*', (request, reply) => {
         addCorsHeaders(reply);
         reply.code(204).send();
@@ -28,6 +35,23 @@ async function bootstrap() {
         done();
     });
     const app = await core_1.NestFactory.create(app_module_1.AppModule, adapter);
+    const hlsDir = path.join(process.cwd(), 'storage', 'hls');
+    if (!fs.existsSync(hlsDir)) {
+        fs.mkdirSync(hlsDir, { recursive: true });
+    }
+    await app.getHttpAdapter().getInstance().register(static_1.default, {
+        root: hlsDir,
+        prefix: '/hls/',
+    });
+    const uploadsDir = path.join(process.cwd(), 'storage', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    await app.getHttpAdapter().getInstance().register(static_1.default, {
+        root: uploadsDir,
+        prefix: '/uploads/',
+        decorateReply: false,
+    });
     const configService = app.get(config_1.ConfigService);
     const port = configService.get('PORT') || 3000;
     const logger = app.get(logger_service_1.LoggerService);
@@ -52,6 +76,7 @@ async function bootstrap() {
         .addTag('Modules', 'Module management endpoints')
         .addTag('Orders', 'Order and payment flows. Create order (POST), list/get (GET), update status (PATCH), confirm payment (POST :id/confirm-payment). Tenant-scoped when x-org-id is sent. Webhook: POST /v1/orders/webhook with x-webhook-secret.')
         .addTag('Files', 'File upload endpoints')
+        .addTag('Video', 'Video processing status and HLS master URL')
         .addBearerAuth({
         type: 'http',
         scheme: 'bearer',

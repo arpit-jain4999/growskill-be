@@ -80,6 +80,18 @@ __decorate([
     (0, swagger_1.ApiProperty)({ type: FileInfoResponseDto }),
     __metadata("design:type", FileInfoResponseDto)
 ], CompleteUploadResponseDto.prototype, "file", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: '507f1f77bcf86cd799439012', description: 'Present for video uploads; poll GET /v1/videos/processing/:id until status is completed' }),
+    __metadata("design:type", String)
+], CompleteUploadResponseDto.prototype, "videoProcessingId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: 'https://api.example.com/hls/507f1f77bcf86cd799439012/master.m3u8', description: 'HLS master playlist URL (stable immediately; playable after transcoding completes)' }),
+    __metadata("design:type", String)
+], CompleteUploadResponseDto.prototype, "hlsMasterUrl", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: 'pending', description: 'Video transcode state: pending until completed/failed' }),
+    __metadata("design:type", String)
+], CompleteUploadResponseDto.prototype, "videoProcessingStatus", void 0);
 class TestUploadResponseDto {
 }
 exports.TestUploadResponseDto = TestUploadResponseDto;

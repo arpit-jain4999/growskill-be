@@ -22,6 +22,15 @@ export class Module {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  @Prop()
+  content?: string;
+
+  @Prop()
+  videoUrl?: string;
+
+  @Prop()
+  duration?: number;
 }
 
 export const ModuleSchema = SchemaFactory.createForClass(Module);

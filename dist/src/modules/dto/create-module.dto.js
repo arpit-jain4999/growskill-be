@@ -45,4 +45,22 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Boolean)
 ], CreateModuleDto.prototype, "isActive", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: 'Module text or HTML content', description: 'Rich-text / HTML content for the module' }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreateModuleDto.prototype, "content", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: 'https://storage.example.com/modules/videos/intro.mp4', description: 'URL of the video associated with this module' }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreateModuleDto.prototype, "videoUrl", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: 600, description: 'Video duration in seconds' }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], CreateModuleDto.prototype, "duration", void 0);
 //# sourceMappingURL=create-module.dto.js.map

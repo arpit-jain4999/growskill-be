@@ -39,6 +39,18 @@ __decorate([
     (0, mongoose_1.Prop)({ default: true }),
     __metadata("design:type", Boolean)
 ], Module.prototype, "isActive", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Module.prototype, "content", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Module.prototype, "videoUrl", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], Module.prototype, "duration", void 0);
 exports.Module = Module = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Module);

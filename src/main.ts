@@ -6,12 +6,16 @@ import {
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import * as path from 'path';
+import * as fs from 'fs';
+import fastifyStatic from '@fastify/static';
+import multipart from '@fastify/multipart';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggerService } from './common/services/logger.service';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
 
-const CORS_ORIGIN = 'https://dev-admin.skillgroww.com';
+const CORS_ORIGIN = 'http://localhost:3000';
 
 function addCorsHeaders(reply: { header: (name: string, value: string) => unknown }) {
   reply.header('Access-Control-Allow-Origin', CORS_ORIGIN);
@@ -23,6 +27,10 @@ function addCorsHeaders(reply: { header: (name: string, value: string) => unknow
 async function bootstrap() {
   const adapter = new FastifyAdapter();
   const fastify = adapter.getInstance();
+
+  await fastify.register(multipart, {
+    limits: { fileSize: 512 * 1024 * 1024 }, // 512 MB
+  });
 
   // 1) OPTIONS catch-all – handle preflight before any Nest route (register first)
   fastify.options('/*', (request, reply) => {
@@ -40,6 +48,26 @@ async function bootstrap() {
     AppModule,
     adapter,
   );
+
+  // Serve HLS output for processed videos (master playlist and segments)
+  const hlsDir = path.join(process.cwd(), 'storage', 'hls');
+  if (!fs.existsSync(hlsDir)) {
+    fs.mkdirSync(hlsDir, { recursive: true });
+  }
+  await app.getHttpAdapter().getInstance().register(fastifyStatic, {
+    root: hlsDir,
+    prefix: '/hls/',
+  });
+
+  const uploadsDir = path.join(process.cwd(), 'storage', 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  await app.getHttpAdapter().getInstance().register(fastifyStatic, {
+    root: uploadsDir,
+    prefix: '/uploads/',
+    decorateReply: false, // second @fastify/static — sendFile already registered by /hls/
+  });
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3000;
@@ -75,6 +103,7 @@ async function bootstrap() {
     .addTag('Modules', 'Module management endpoints')
     .addTag('Orders', 'Order and payment flows. Create order (POST), list/get (GET), update status (PATCH), confirm payment (POST :id/confirm-payment). Tenant-scoped when x-org-id is sent. Webhook: POST /v1/orders/webhook with x-webhook-secret.')
     .addTag('Files', 'File upload endpoints')
+    .addTag('Video', 'Video processing status and HLS master URL')
     .addBearerAuth(
       {
         type: 'http',
