@@ -5,11 +5,11 @@ const platform_fastify_1 = require("@nestjs/platform-fastify");
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const swagger_1 = require("@nestjs/swagger");
-const path = require("path");
 const fs = require("fs");
 const static_1 = require("@fastify/static");
 const multipart_1 = require("@fastify/multipart");
 const app_module_1 = require("./app.module");
+const local_media_paths_1 = require("./common/utils/local-media-paths");
 const http_exception_filter_1 = require("./common/filters/http-exception.filter");
 const logger_service_1 = require("./common/services/logger.service");
 const transform_response_interceptor_1 = require("./common/interceptors/transform-response.interceptor");
@@ -35,7 +35,8 @@ async function bootstrap() {
         done();
     });
     const app = await core_1.NestFactory.create(app_module_1.AppModule, adapter);
-    const hlsDir = path.join(process.cwd(), 'storage', 'hls');
+    const configService = app.get(config_1.ConfigService);
+    const hlsDir = (0, local_media_paths_1.resolveHlsOutputRoot)(configService.get('VIDEO_HLS_OUTPUT_DIR'));
     if (!fs.existsSync(hlsDir)) {
         fs.mkdirSync(hlsDir, { recursive: true });
     }
@@ -43,16 +44,22 @@ async function bootstrap() {
         root: hlsDir,
         prefix: '/hls/',
     });
-    const uploadsDir = path.join(process.cwd(), 'storage', 'uploads');
-    if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
+    const storageUseLocal = configService.get('STORAGE_USE_LOCAL') === 'true';
+    const s3Bucket = (configService.get('AWS_S3_BUCKET') ||
+        configService.get('FILE_BUCKET_NAME') ||
+        '').trim();
+    const s3UploadsEnabled = !storageUseLocal && s3Bucket.length > 0;
+    if (!s3UploadsEnabled) {
+        const uploadsDir = (0, local_media_paths_1.resolveLocalUploadsRoot)(configService.get('LOCAL_UPLOADS_ROOT'));
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        await app.getHttpAdapter().getInstance().register(static_1.default, {
+            root: uploadsDir,
+            prefix: '/uploads/',
+            decorateReply: false,
+        });
     }
-    await app.getHttpAdapter().getInstance().register(static_1.default, {
-        root: uploadsDir,
-        prefix: '/uploads/',
-        decorateReply: false,
-    });
-    const configService = app.get(config_1.ConfigService);
     const port = configService.get('PORT') || 3000;
     const logger = app.get(logger_service_1.LoggerService);
     app.useGlobalFilters(new http_exception_filter_1.HttpExceptionFilter(logger));

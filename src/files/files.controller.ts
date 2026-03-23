@@ -55,7 +55,7 @@ export class FilesController {
   @ApiOperation({
     summary: 'Upload file directly (local disk)',
     description:
-      'Writes the file to storage/uploads and returns the same shape as upload/complete. Required for local HLS transcoding when objects are not on S3. Optional fields: folder, moduleId, chapterId (send before file).',
+      'Writes the file to LOCAL_UPLOADS_ROOT (default: OS temp dir) and returns the same shape as upload/complete. Required for local HLS transcoding when objects are not on S3. Optional fields: folder, moduleId, chapterId (send before file).',
   })
   @ApiOkResponse({ description: 'File saved', type: CompleteUploadResponseDto })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT', type: StandardErrorResponseDto })

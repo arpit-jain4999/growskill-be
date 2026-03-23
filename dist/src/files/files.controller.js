@@ -88,7 +88,7 @@ __decorate([
     (0, swagger_1.ApiConsumes)('multipart/form-data'),
     (0, swagger_1.ApiOperation)({
         summary: 'Upload file directly (local disk)',
-        description: 'Writes the file to storage/uploads and returns the same shape as upload/complete. Required for local HLS transcoding when objects are not on S3. Optional fields: folder, moduleId, chapterId (send before file).',
+        description: 'Writes the file to LOCAL_UPLOADS_ROOT (default: OS temp dir) and returns the same shape as upload/complete. Required for local HLS transcoding when objects are not on S3. Optional fields: folder, moduleId, chapterId (send before file).',
     }),
     (0, swagger_1.ApiOkResponse)({ description: 'File saved', type: file_response_dto_1.CompleteUploadResponseDto }),
     (0, swagger_1.ApiUnauthorizedResponse)({ description: 'Missing or invalid JWT', type: error_response_dto_1.StandardErrorResponseDto }),

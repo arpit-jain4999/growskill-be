@@ -6,11 +6,11 @@ import {
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import * as path from 'path';
 import * as fs from 'fs';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import { AppModule } from './app.module';
+import { resolveHlsOutputRoot, resolveLocalUploadsRoot } from './common/utils/local-media-paths';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggerService } from './common/services/logger.service';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
@@ -49,8 +49,10 @@ async function bootstrap() {
     adapter,
   );
 
-  // Serve HLS output for processed videos (master playlist and segments)
-  const hlsDir = path.join(process.cwd(), 'storage', 'hls');
+  const configService = app.get(ConfigService);
+
+  // HLS: ffmpeg writes here first; with S3 enabled the worker uploads artifacts and may delete this folder after.
+  const hlsDir = resolveHlsOutputRoot(configService.get<string>('VIDEO_HLS_OUTPUT_DIR'));
   if (!fs.existsSync(hlsDir)) {
     fs.mkdirSync(hlsDir, { recursive: true });
   }
@@ -59,17 +61,25 @@ async function bootstrap() {
     prefix: '/hls/',
   });
 
-  const uploadsDir = path.join(process.cwd(), 'storage', 'uploads');
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
+  // Local /uploads/ only when S3 is off — avoids empty storage/uploads when uploads go to S3.
+  const storageUseLocal = configService.get<string>('STORAGE_USE_LOCAL') === 'true';
+  const s3Bucket = (
+    configService.get<string>('AWS_S3_BUCKET') ||
+    configService.get<string>('FILE_BUCKET_NAME') ||
+    ''
+  ).trim();
+  const s3UploadsEnabled = !storageUseLocal && s3Bucket.length > 0;
+  if (!s3UploadsEnabled) {
+    const uploadsDir = resolveLocalUploadsRoot(configService.get<string>('LOCAL_UPLOADS_ROOT'));
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    await app.getHttpAdapter().getInstance().register(fastifyStatic, {
+      root: uploadsDir,
+      prefix: '/uploads/',
+      decorateReply: false, // second @fastify/static — sendFile already registered by /hls/
+    });
   }
-  await app.getHttpAdapter().getInstance().register(fastifyStatic, {
-    root: uploadsDir,
-    prefix: '/uploads/',
-    decorateReply: false, // second @fastify/static — sendFile already registered by /hls/
-  });
-
-  const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3000;
   const logger = app.get(LoggerService);
 

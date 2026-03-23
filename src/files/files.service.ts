@@ -6,15 +6,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { pipeline } from 'stream/promises';
 import { FileRepository } from './repositories/file.repository';
+import { S3StorageService } from './s3-storage.service';
 import { LoggerService } from '../common/services/logger.service';
 import { InitiateUploadDto, CompleteUploadDto, TestUploadDto } from './dto/upload-file.dto';
 import { VideoProcessingService } from '../video-processing/video-processing.service';
 import { randomUUID } from 'crypto';
 import { firstValueFrom } from 'rxjs';
+import { resolvePublicFileStorageBaseUrl } from '../common/utils/storage-public-base-url';
+import { resolveLocalUploadsRoot } from '../common/utils/local-media-paths';
 
 @Injectable()
 export class FilesService {
-  private readonly bucketName: string;
   private uploadSessions: Map<
     string,
     { fileKey: string; mimeType: string; callbackUrl?: string; chapterId?: string; moduleId?: string }
@@ -25,23 +27,22 @@ export class FilesService {
     private configService: ConfigService,
     private logger: LoggerService,
     private httpService: HttpService,
+    private s3: S3StorageService,
     @Inject(forwardRef(() => VideoProcessingService))
     private videoProcessingService: VideoProcessingService,
   ) {
     this.logger.setContext('FilesService');
-    this.bucketName = this.configService.get<string>('FILE_BUCKET_NAME') || 'skillgroww-files';
   }
 
   /**
    * Public base URL for stored objects (used in imgUrl). Empty/placeholder FILE_BASE_URL → local /uploads.
    */
   resolvePublicFileBaseUrl(): string {
-    const fb = (this.configService.get<string>('FILE_BASE_URL') ?? '').trim();
-    if (fb && !/storage\.example\.com/i.test(fb)) {
-      return fb.replace(/\/$/, '');
-    }
-    const port = this.configService.get<number>('PORT') || 3000;
-    return `http://localhost:${port}/uploads`;
+    return resolvePublicFileStorageBaseUrl(
+      (k) => this.configService.get(k),
+      this.s3.isEnabled(),
+      this.s3.getBucket(),
+    );
   }
 
   /**
@@ -66,6 +67,8 @@ export class FilesService {
 
     // Generate signed URL for multipart upload
     const signedUrl = await this.generateSignedUrl(fileKey, dto.mimeType);
+    const expiresIn =
+      parseInt(this.configService.get<string>('S3_PRESIGNED_EXPIRES_SEC') || '3600', 10) || 3600;
 
     // Store upload session: optional chapterId and/or moduleId tie HLS output to content after transcode
     this.uploadSessions.set(uploadId, {
@@ -80,7 +83,7 @@ export class FilesService {
       uploadId,
       fileKey,
       signedUrl,
-      expiresIn: 3600, // 1 hour
+      expiresIn,
     };
   }
 
@@ -89,17 +92,12 @@ export class FilesService {
    * In production, this would use AWS S3 presigned URL or similar
    */
   private async generateSignedUrl(fileKey: string, mimeType: string): Promise<string> {
-    // TODO: Integrate with actual file storage service (AWS S3, Google Cloud Storage, etc.)
-    // Example for AWS S3:
-    // const s3 = new AWS.S3();
-    // return s3.getSignedUrlPromise('putObject', {
-    //   Bucket: this.bucketName,
-    //   Key: fileKey,
-    //   ContentType: mimeType,
-    //   Expires: 3600,
-    // });
-
-    // Placeholder implementation (real S3 would return a presigned PUT URL)
+    if (this.s3.isEnabled()) {
+      const expires = parseInt(this.configService.get<string>('S3_PRESIGNED_EXPIRES_SEC') || '3600', 10) || 3600;
+      const url = await this.s3.getPresignedPutUrl(fileKey, mimeType, expires);
+      this.logger.log(`S3 presigned PUT for key: ${fileKey}`);
+      return url;
+    }
     const origin = this.resolveAppOrigin();
     return `${origin}/fake-upload?key=${encodeURIComponent(fileKey)}&mimeType=${encodeURIComponent(mimeType)}`;
   }
@@ -135,18 +133,28 @@ export class FilesService {
       throw new BadRequestException('File key mismatch');
     }
 
-    // In production, verify the upload was successful with the storage service
-    // For now, we'll create the file record
+    let sizeFromS3: number | undefined;
+    if (this.s3.isEnabled()) {
+      try {
+        const meta = await this.s3.assertObjectExists(dto.fileKey);
+        sizeFromS3 = meta.contentLength;
+      } catch {
+        throw new BadRequestException(
+          `No object in S3 at key "${dto.fileKey}". PUT the file to the presigned URL first, then call complete.`,
+        );
+      }
+    }
 
     const fileName = dto.fileKey.split('/').pop() || 'file';
     const publicBase = this.resolvePublicFileBaseUrl();
+    const parsedSize = dto.fileSize ? parseInt(dto.fileSize, 10) : undefined;
     const fileInfo = await this.fileRepository.create({
       name: fileName,
       key: dto.fileKey,
       baseUrl: publicBase,
       imgUrl: `${publicBase}/${dto.fileKey}`,
       mimeType: uploadSession.mimeType,
-      size: dto.fileSize ? parseInt(dto.fileSize, 10) : undefined,
+      size: parsedSize ?? sizeFromS3,
     });
 
     // All video uploads: enqueue HLS transcoding. Optional chapterId / moduleId receive the master URL when done.
@@ -266,7 +274,7 @@ export class FilesService {
   }
 
   /**
-   * Save multipart upload to disk under storage/uploads and create FileInfo (recommended for local dev & HLS source).
+   * Save multipart upload to disk under LOCAL_UPLOADS_ROOT (default: OS temp, not ./storage) and create FileInfo.
    * Form fields (optional): folder, moduleId, chapterId — send them before the file part for correct folder routing.
    */
   async uploadMultipartDirect(req: FastifyRequest) {
@@ -289,7 +297,7 @@ export class FilesService {
     let mimeType = 'application/octet-stream';
     let size = 0;
 
-    const uploadsRoot = path.join(process.cwd(), 'storage', 'uploads');
+    const uploadsRoot = resolveLocalUploadsRoot(this.configService.get<string>('LOCAL_UPLOADS_ROOT'));
 
     for await (const part of req.parts()) {
       if (part.type === 'field') {
@@ -305,10 +313,15 @@ export class FilesService {
         originalName = part.filename || originalName;
         mimeType = part.mimetype || mimeType;
         fileKey = this.generateFileKey(originalName, folder);
-        const destPath = path.join(uploadsRoot, fileKey);
-        fs.mkdirSync(path.dirname(destPath), { recursive: true });
-        await pipeline(part.file, fs.createWriteStream(destPath));
-        size = fs.statSync(destPath).size;
+        if (this.s3.isEnabled()) {
+          const { size: uploaded } = await this.s3.uploadStream(fileKey, part.file, mimeType);
+          size = uploaded ?? 0;
+        } else {
+          const destPath = path.join(uploadsRoot, fileKey);
+          fs.mkdirSync(path.dirname(destPath), { recursive: true });
+          await pipeline(part.file, fs.createWriteStream(destPath));
+          size = fs.statSync(destPath).size;
+        }
         wroteFile = true;
       }
     }

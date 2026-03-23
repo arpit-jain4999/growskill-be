@@ -12,6 +12,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const axios_1 = require("@nestjs/axios");
 const files_controller_1 = require("./files.controller");
 const files_service_1 = require("./files.service");
+const s3_storage_service_1 = require("./s3-storage.service");
 const file_repository_1 = require("./repositories/file.repository");
 const file_schema_1 = require("../common/schemas/file.schema");
 const video_processing_module_1 = require("../video-processing/video-processing.module");
@@ -28,8 +29,8 @@ exports.FilesModule = FilesModule = __decorate([
             (0, common_1.forwardRef)(() => video_processing_module_1.VideoProcessingModule),
         ],
         controllers: [files_controller_1.FilesController],
-        providers: [files_service_1.FilesService, file_repository_1.FileRepository],
-        exports: [files_service_1.FilesService, file_repository_1.FileRepository],
+        providers: [s3_storage_service_1.S3StorageService, files_service_1.FilesService, file_repository_1.FileRepository],
+        exports: [files_service_1.FilesService, file_repository_1.FileRepository, s3_storage_service_1.S3StorageService],
     })
 ], FilesModule);
 //# sourceMappingURL=files.module.js.map

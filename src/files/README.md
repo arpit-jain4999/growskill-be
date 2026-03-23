@@ -10,6 +10,53 @@ This module handles file uploads with multipart upload support, signed URL gener
 - File metadata storage
 - Backend testing endpoint
 - **Video:** automatic HLS transcoding on upload complete; optional **`moduleId`** or **`chapterId`** to attach the finished HLS URL to a module or chapter
+- **AWS S3** (optional): presigned PUT from **`POST /v1/files/upload/initiate`**, verification on **`POST /v1/files/upload/complete`**, and server-side upload via **`POST /v1/files/upload/direct`**
+
+## AWS S3 setup
+
+### When S3 is used
+
+S3 is **on** when **`AWS_S3_BUCKET`** or **`FILE_BUCKET_NAME`** is set (non-empty) **and** **`STORAGE_USE_LOCAL`** is **not** `true`.
+
+If those are missing, the API keeps using **local disk** (`LOCAL_UPLOADS_ROOT` + `/uploads/`).
+
+**HLS with S3:** When S3 is on (and **`HLS_UPLOAD_TO_S3`** is not `false`), ffmpeg still writes HLS to a temp directory on the server, then the API **uploads every `.m3u8` and `.ts`** to the same bucket under **`{HLS_S3_KEY_PREFIX}/{videoProcessingId}/`** (default prefix `hls`). **`hlsMasterUrl`** becomes **`FILE_BASE_URL`/`HLS_S3_PUBLIC_BASE_URL` + `/hls/{id}/master.m3u8`** so CloudFront can serve the same distribution as uploads. Local HLS files are removed after upload by default (**`HLS_DELETE_LOCAL_AFTER_S3_UPLOAD`**). When S3 is enabled, **`/uploads/`** is not registered (originals live in the bucket only).
+
+**HLS without S3 (or `HLS_UPLOAD_TO_S3=false`):** HLS stays on disk and is served at **`/hls/...`** on the API; set **`HLS_PUBLIC_BASE_URL`** / **`PUBLIC_APP_URL`** as needed.
+
+### Environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AWS_S3_BUCKET` | For S3 | Bucket name (or use `FILE_BUCKET_NAME`) |
+| `AWS_REGION` | Recommended | e.g. `ap-south-1` |
+| `AWS_ACCESS_KEY_ID` | Usually* | IAM access key |
+| `AWS_SECRET_ACCESS_KEY` | Usually* | IAM secret key |
+| `FILE_BASE_URL` | Recommended prod | Public base for objects, e.g. **`https://dxxxx.cloudfront.net`** (overrides auto `https://bucket.s3.region.amazonaws.com`) |
+| `STORAGE_USE_LOCAL` | Optional | Set to `true` to **force** local disk even if a bucket name is set |
+| `S3_PRESIGNED_EXPIRES_SEC` | Optional | Presigned PUT TTL (default `3600`) |
+| `AWS_S3_ENDPOINT` | Optional | For **MinIO** / LocalStack, e.g. `http://localhost:9000` |
+| `AWS_S3_FORCE_PATH_STYLE` | Optional | Set `true` for MinIO-style endpoints |
+| `HLS_UPLOAD_TO_S3` | Optional | Default **on** when S3 is on. Set `false` to keep HLS only on the API disk. |
+| `HLS_S3_KEY_PREFIX` | Optional | S3 key prefix for HLS objects (default `hls`). |
+| `HLS_S3_PUBLIC_BASE_URL` | Optional | Public base for HLS URLs when uploaded to S3; defaults to same as **`FILE_BASE_URL`** (or S3 virtual host). |
+| `HLS_DELETE_LOCAL_AFTER_S3_UPLOAD` | Optional | Default **on**: delete local HLS folder after successful S3 upload. |
+
+\*On **EC2/ECS/Lambda**, you can omit keys and use an **IAM role** with **`s3:PutObject`**, **`s3:GetObject`**, **`s3:HeadObject`** on the bucket/prefix. **`s3:GetObject`** is required for **video transcoding** when the bucket or CloudFront URL is not publicly readable (the worker pulls the source via the SDK, not anonymous HTTP). **HLS upload** needs **`s3:PutObject`** on `hls/*` (or your **`HLS_S3_KEY_PREFIX`**).
+
+### Your responsibilities
+
+1. **Create an S3 bucket** in the chosen region.
+2. **IAM policy** (least privilege): allow the app role/user `PutObject`, `GetObject`, `HeadObject` (and `ListBucket` only if you need it) on `arn:aws:s3:::your-bucket/*`.
+3. **Public read vs CloudFront:** The **transcoder** downloads the source video via **`imgUrl`** (HTTP GET). Either:
+   - Make the **upload prefix** publicly readable (bucket policy), **or**
+   - Put **CloudFront** in front of the bucket (**OAC**), set **`FILE_BASE_URL`** to the distribution URL, and keep the bucket private.
+4. **HLS playback:** With S3 enabled, objects are at **`hls/{videoProcessingId}/...`** in the bucket. Point **`FILE_BASE_URL`** (CloudFront) at that bucket so **`https://your-cdn/hls/.../master.m3u8`** is publicly readable (bucket policy or CloudFront OAC). For local-only HLS, use **`HLS_PUBLIC_BASE_URL`** for the API origin.
+
+### Client flows with S3
+
+1. **Presigned:** `POST .../upload/initiate` → `PUT` binary to **`signedUrl`** with the **same `Content-Type`** as `mimeType` → `POST .../upload/complete`.
+2. **Direct (admin):** `POST .../upload/direct` with **multipart** `file` — the API streams the file to S3 when S3 is enabled.
 
 ## Video without a “chapter” screen in admin
 
@@ -21,12 +68,14 @@ The backend already supports **module-level video** (`Module.videoUrl`). If the 
 
 Optional: to use **chapters** instead, call **`POST /v1/admin/chapter`** with `moduleId` + `title`, then pass the returned chapter id as **`chapterId`** on upload initiate so **`Chapter.videoUrl`** is set when done.
 
-Env: set **`HLS_PUBLIC_BASE_URL`** or **`PUBLIC_APP_URL`** to the origin where **`/hls/...`** is served (your API or CloudFront in front of it).
+**S3 + default HLS upload:** **`hlsMasterUrl`** uses **`FILE_BASE_URL`** (same CloudFront as uploads). Ensure the distribution (or bucket policy) allows **GET** on the `hls/` prefix.
+
+**Local HLS only:** set **`HLS_UPLOAD_TO_S3=false`** and set **`HLS_PUBLIC_BASE_URL`** or **`PUBLIC_APP_URL`** to the API origin where **`/hls/...`** is served.
 
 ### Local dev: `ENOTFOUND storage.example.com` / transcoding fails
 
 - Empty **`FILE_BASE_URL`** now defaults to **`http://localhost:{PORT}/uploads`** (not `storage.example.com`).
-- Use **`POST /v1/files/upload/direct`** (multipart: `folder`, optional `moduleId` / `chapterId`, then **`file`**) so the binary is saved under **`storage/uploads`** and served at **`/uploads/...`**. The HLS worker reads from disk first, then falls back to HTTP.
+- Use **`POST /v1/files/upload/direct`** (multipart: `folder`, optional `moduleId` / `chapterId`, then **`file`**) so the binary is saved under **`LOCAL_UPLOADS_ROOT`** (default OS temp) and served at **`/uploads/...`**. The HLS worker reads from disk first, then falls back to HTTP/S3.
 - Set a real **`FILE_BASE_URL`** (e.g. CloudFront) in production when objects live on S3.
 
 ## API Endpoints

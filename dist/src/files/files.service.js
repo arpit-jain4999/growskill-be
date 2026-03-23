@@ -20,28 +20,26 @@ const fs = require("fs");
 const path = require("path");
 const promises_1 = require("stream/promises");
 const file_repository_1 = require("./repositories/file.repository");
+const s3_storage_service_1 = require("./s3-storage.service");
 const logger_service_1 = require("../common/services/logger.service");
 const video_processing_service_1 = require("../video-processing/video-processing.service");
 const crypto_1 = require("crypto");
 const rxjs_1 = require("rxjs");
+const storage_public_base_url_1 = require("../common/utils/storage-public-base-url");
+const local_media_paths_1 = require("../common/utils/local-media-paths");
 let FilesService = class FilesService {
-    constructor(fileRepository, configService, logger, httpService, videoProcessingService) {
+    constructor(fileRepository, configService, logger, httpService, s3, videoProcessingService) {
         this.fileRepository = fileRepository;
         this.configService = configService;
         this.logger = logger;
         this.httpService = httpService;
+        this.s3 = s3;
         this.videoProcessingService = videoProcessingService;
         this.uploadSessions = new Map();
         this.logger.setContext('FilesService');
-        this.bucketName = this.configService.get('FILE_BUCKET_NAME') || 'skillgroww-files';
     }
     resolvePublicFileBaseUrl() {
-        const fb = (this.configService.get('FILE_BASE_URL') ?? '').trim();
-        if (fb && !/storage\.example\.com/i.test(fb)) {
-            return fb.replace(/\/$/, '');
-        }
-        const port = this.configService.get('PORT') || 3000;
-        return `http://localhost:${port}/uploads`;
+        return (0, storage_public_base_url_1.resolvePublicFileStorageBaseUrl)((k) => this.configService.get(k), this.s3.isEnabled(), this.s3.getBucket());
     }
     generateFileKey(fileName, folder) {
         const timestamp = Date.now();
@@ -55,6 +53,7 @@ let FilesService = class FilesService {
         const fileKey = this.generateFileKey(dto.fileName, dto.folder);
         const uploadId = (0, crypto_1.randomUUID)();
         const signedUrl = await this.generateSignedUrl(fileKey, dto.mimeType);
+        const expiresIn = parseInt(this.configService.get('S3_PRESIGNED_EXPIRES_SEC') || '3600', 10) || 3600;
         this.uploadSessions.set(uploadId, {
             fileKey,
             mimeType: dto.mimeType,
@@ -66,10 +65,16 @@ let FilesService = class FilesService {
             uploadId,
             fileKey,
             signedUrl,
-            expiresIn: 3600,
+            expiresIn,
         };
     }
     async generateSignedUrl(fileKey, mimeType) {
+        if (this.s3.isEnabled()) {
+            const expires = parseInt(this.configService.get('S3_PRESIGNED_EXPIRES_SEC') || '3600', 10) || 3600;
+            const url = await this.s3.getPresignedPutUrl(fileKey, mimeType, expires);
+            this.logger.log(`S3 presigned PUT for key: ${fileKey}`);
+            return url;
+        }
         const origin = this.resolveAppOrigin();
         return `${origin}/fake-upload?key=${encodeURIComponent(fileKey)}&mimeType=${encodeURIComponent(mimeType)}`;
     }
@@ -94,15 +99,26 @@ let FilesService = class FilesService {
         if (uploadSession.fileKey !== dto.fileKey) {
             throw new common_1.BadRequestException('File key mismatch');
         }
+        let sizeFromS3;
+        if (this.s3.isEnabled()) {
+            try {
+                const meta = await this.s3.assertObjectExists(dto.fileKey);
+                sizeFromS3 = meta.contentLength;
+            }
+            catch {
+                throw new common_1.BadRequestException(`No object in S3 at key "${dto.fileKey}". PUT the file to the presigned URL first, then call complete.`);
+            }
+        }
         const fileName = dto.fileKey.split('/').pop() || 'file';
         const publicBase = this.resolvePublicFileBaseUrl();
+        const parsedSize = dto.fileSize ? parseInt(dto.fileSize, 10) : undefined;
         const fileInfo = await this.fileRepository.create({
             name: fileName,
             key: dto.fileKey,
             baseUrl: publicBase,
             imgUrl: `${publicBase}/${dto.fileKey}`,
             mimeType: uploadSession.mimeType,
-            size: dto.fileSize ? parseInt(dto.fileSize, 10) : undefined,
+            size: parsedSize ?? sizeFromS3,
         });
         const isVideo = uploadSession.mimeType.startsWith('video/');
         let videoProcessingId;
@@ -202,7 +218,7 @@ let FilesService = class FilesService {
         let originalName = 'upload.bin';
         let mimeType = 'application/octet-stream';
         let size = 0;
-        const uploadsRoot = path.join(process.cwd(), 'storage', 'uploads');
+        const uploadsRoot = (0, local_media_paths_1.resolveLocalUploadsRoot)(this.configService.get('LOCAL_UPLOADS_ROOT'));
         for await (const part of req.parts()) {
             if (part.type === 'field') {
                 const v = String(part.value ?? '').trim();
@@ -221,10 +237,16 @@ let FilesService = class FilesService {
                 originalName = part.filename || originalName;
                 mimeType = part.mimetype || mimeType;
                 fileKey = this.generateFileKey(originalName, folder);
-                const destPath = path.join(uploadsRoot, fileKey);
-                fs.mkdirSync(path.dirname(destPath), { recursive: true });
-                await (0, promises_1.pipeline)(part.file, fs.createWriteStream(destPath));
-                size = fs.statSync(destPath).size;
+                if (this.s3.isEnabled()) {
+                    const { size: uploaded } = await this.s3.uploadStream(fileKey, part.file, mimeType);
+                    size = uploaded ?? 0;
+                }
+                else {
+                    const destPath = path.join(uploadsRoot, fileKey);
+                    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+                    await (0, promises_1.pipeline)(part.file, fs.createWriteStream(destPath));
+                    size = fs.statSync(destPath).size;
+                }
                 wroteFile = true;
             }
         }
@@ -279,11 +301,12 @@ let FilesService = class FilesService {
 exports.FilesService = FilesService;
 exports.FilesService = FilesService = __decorate([
     (0, common_1.Injectable)(),
-    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => video_processing_service_1.VideoProcessingService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => video_processing_service_1.VideoProcessingService))),
     __metadata("design:paramtypes", [file_repository_1.FileRepository,
         config_1.ConfigService,
         logger_service_1.LoggerService,
         axios_1.HttpService,
+        s3_storage_service_1.S3StorageService,
         video_processing_service_1.VideoProcessingService])
 ], FilesService);
 //# sourceMappingURL=files.service.js.map

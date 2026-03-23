@@ -24,14 +24,19 @@ const chapter_repository_1 = require("../chapters/repositories/chapter.repositor
 const module_repository_1 = require("../modules/repositories/module.repository");
 const logger_service_1 = require("../common/services/logger.service");
 const video_processing_schema_1 = require("./schemas/video-processing.schema");
+const s3_storage_service_1 = require("../files/s3-storage.service");
+const local_media_paths_1 = require("../common/utils/local-media-paths");
+const url_normalize_1 = require("../common/utils/url-normalize");
+const storage_public_base_url_1 = require("../common/utils/storage-public-base-url");
 let VideoProcessingService = class VideoProcessingService {
-    constructor(videoProcessingRepo, fileRepository, chapterRepository, moduleRepository, configService, logger) {
+    constructor(videoProcessingRepo, fileRepository, chapterRepository, moduleRepository, configService, logger, s3Storage) {
         this.videoProcessingRepo = videoProcessingRepo;
         this.fileRepository = fileRepository;
         this.chapterRepository = chapterRepository;
         this.moduleRepository = moduleRepository;
         this.configService = configService;
         this.logger = logger;
+        this.s3Storage = s3Storage;
         this.logger.setContext('VideoProcessingService');
     }
     async startTranscode(params) {
@@ -86,6 +91,17 @@ let VideoProcessingService = class VideoProcessingService {
             await this.resolveSourceVideoToTemp(fileInfo.key, sourceUrl, tempFile);
             await this.runFfmpegHls(tempFile, outputDir);
             const masterUrl = this.resolveMasterPlaylistUrl(videoProcessingId);
+            if (this.shouldPublishHlsToS3()) {
+                await this.uploadHlsArtifactsToS3(videoProcessingId, outputDir);
+                if (this.shouldDeleteLocalHlsAfterS3()) {
+                    try {
+                        fs.rmSync(outputDir, { recursive: true, force: true });
+                    }
+                    catch (rmErr) {
+                        this.logger.warn(`Could not remove local HLS dir ${outputDir}: ${rmErr?.message}`);
+                    }
+                }
+            }
             await this.videoProcessingRepo.updateStatus(videoProcessingId, video_processing_schema_1.VIDEO_PROCESSING_STATUS.COMPLETED, {
                 masterPlaylistUrl: masterUrl,
             });
@@ -128,22 +144,81 @@ let VideoProcessingService = class VideoProcessingService {
         }
     }
     getOutputDir(videoProcessingId) {
-        const base = this.configService.get('VIDEO_HLS_OUTPUT_DIR') || path.join(process.cwd(), 'storage', 'hls');
+        const base = (0, local_media_paths_1.resolveHlsOutputRoot)(this.configService.get('VIDEO_HLS_OUTPUT_DIR'));
         return path.join(base, videoProcessingId);
     }
     resolveMasterPlaylistUrl(videoProcessingId) {
+        if (this.shouldPublishHlsToS3()) {
+            const explicit = (this.configService.get('HLS_S3_PUBLIC_BASE_URL') ?? '').trim();
+            const baseRaw = explicit && !/storage\.example\.com/i.test(explicit)
+                ? (0, url_normalize_1.normalizePublicBaseUrl)(explicit)
+                : (0, storage_public_base_url_1.resolvePublicFileStorageBaseUrl)((k) => this.configService.get(k), true, this.s3Storage.getBucket());
+            const base = baseRaw.replace(/\/$/, '');
+            const prefix = this.getHlsS3KeyPrefix();
+            return `${base}/${prefix}/${videoProcessingId}/master.m3u8`;
+        }
         const explicit = (this.configService.get('HLS_PUBLIC_BASE_URL') ?? '').trim() ||
-            (this.configService.get('PUBLIC_APP_URL') ?? '').trim() ||
-            (this.configService.get('FILE_BASE_URL') ?? '').trim();
+            (this.configService.get('PUBLIC_APP_URL') ?? '').trim();
         const fb = explicit && !/storage\.example\.com/i.test(explicit) ? explicit : '';
         const port = this.configService.get('PORT') || 3000;
-        const baseUrl = fb || `http://localhost:${port}`;
+        const baseUrl = fb ? (0, url_normalize_1.normalizePublicBaseUrl)(fb) : `http://localhost:${port}`;
         const base = baseUrl.replace(/\/$/, '');
         return `${base}/hls/${videoProcessingId}/master.m3u8`;
     }
+    shouldPublishHlsToS3() {
+        if (!this.s3Storage.isEnabled())
+            return false;
+        const v = (this.configService.get('HLS_UPLOAD_TO_S3') ?? '').trim().toLowerCase();
+        return v !== 'false' && v !== '0' && v !== 'no';
+    }
+    shouldDeleteLocalHlsAfterS3() {
+        const v = (this.configService.get('HLS_DELETE_LOCAL_AFTER_S3_UPLOAD') ?? '').trim().toLowerCase();
+        return v !== 'false' && v !== '0' && v !== 'no';
+    }
+    getHlsS3KeyPrefix() {
+        const p = (this.configService.get('HLS_S3_KEY_PREFIX') ?? 'hls')
+            .trim()
+            .replace(/^\/+|\/+$/g, '');
+        return p || 'hls';
+    }
+    contentTypeForHlsFile(fileName) {
+        const lower = fileName.toLowerCase();
+        if (lower.endsWith('.m3u8'))
+            return 'application/vnd.apple.mpegurl';
+        if (lower.endsWith('.ts'))
+            return 'video/mp2t';
+        return 'application/octet-stream';
+    }
+    cacheControlForHlsFile(fileName) {
+        return fileName.toLowerCase().endsWith('.m3u8')
+            ? 'public, max-age=5'
+            : 'public, max-age=31536000, immutable';
+    }
+    async uploadHlsArtifactsToS3(videoProcessingId, outputDir) {
+        const prefix = this.getHlsS3KeyPrefix();
+        const entries = fs.readdirSync(outputDir, { withFileTypes: true });
+        const files = entries.filter((e) => e.isFile()).map((e) => e.name);
+        if (files.length === 0) {
+            throw new Error('No HLS output files to upload');
+        }
+        const sorted = files.sort((a, b) => {
+            if (a === 'master.m3u8')
+                return 1;
+            if (b === 'master.m3u8')
+                return -1;
+            return a.localeCompare(b);
+        });
+        for (const name of sorted) {
+            const full = path.join(outputDir, name);
+            const key = `${prefix}/${videoProcessingId}/${name}`;
+            const contentType = this.contentTypeForHlsFile(name);
+            const cacheControl = this.cacheControlForHlsFile(name);
+            await this.s3Storage.uploadLocalFile(key, full, contentType, cacheControl);
+        }
+        this.logger.log(`HLS uploaded: s3://${this.s3Storage.getBucket()}/${prefix}/${videoProcessingId}/ (${sorted.length} files)`);
+    }
     async resolveSourceVideoToTemp(fileKey, sourceUrl, tempFile) {
-        const uploadsRoot = this.configService.get('LOCAL_UPLOADS_ROOT')?.trim() ||
-            path.join(process.cwd(), 'storage', 'uploads');
+        const uploadsRoot = (0, local_media_paths_1.resolveLocalUploadsRoot)(this.configService.get('LOCAL_UPLOADS_ROOT'));
         const safeParts = fileKey
             .replace(/^\/+/, '')
             .split(/[/\\]+/)
@@ -154,20 +229,71 @@ let VideoProcessingService = class VideoProcessingService {
             this.logger.log(`Transcode source: local file ${localPath}`);
             return;
         }
+        if (this.s3Storage.isEnabled()) {
+            try {
+                await this.s3Storage.getObjectToFile(fileKey, tempFile);
+                this.logger.log(`Transcode source: S3 GetObject ${fileKey}`);
+                return;
+            }
+            catch (err) {
+                this.logger.warn(`S3 GetObject failed for key "${fileKey}", falling back to HTTP download: ${err?.message}`);
+            }
+        }
         await this.downloadFile(sourceUrl, tempFile);
     }
+    resolveAbsoluteUrlForDownload(raw) {
+        const s = (raw ?? '').trim();
+        if (!s) {
+            throw new Error('Source video URL is empty — ensure FileInfo has a valid baseUrl/imgUrl (e.g. set FILE_BASE_URL or use S3 public URL).');
+        }
+        if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(s) && !s.startsWith('/')) {
+            try {
+                return (0, url_normalize_1.ensureAbsoluteHttpUrl)(s);
+            }
+            catch {
+            }
+        }
+        try {
+            return new URL(s).href;
+        }
+        catch {
+            const port = this.configService.get('PORT') || 3000;
+            const appBase = (this.configService.get('PUBLIC_APP_URL') ?? '').trim() ||
+                (this.configService.get('HLS_PUBLIC_BASE_URL') ?? '').trim() ||
+                `http://localhost:${port}`;
+            const origin = appBase.replace(/\/$/, '');
+            const pathPart = s.startsWith('/') ? s : `/${s}`;
+            try {
+                return new URL(pathPart, `${origin}/`).href;
+            }
+            catch {
+                throw new Error(`Invalid source URL: ${s.slice(0, 200)}`);
+            }
+        }
+    }
+    resolveRedirectUrl(location, currentUrl) {
+        const loc = (location ?? '').trim();
+        try {
+            return new URL(loc).href;
+        }
+        catch {
+            return new URL(loc, currentUrl).href;
+        }
+    }
     downloadFile(url, destPath) {
+        const absoluteUrl = this.resolveAbsoluteUrlForDownload(url);
         return new Promise((resolve, reject) => {
-            const protocol = url.startsWith('https') ? https : http;
+            const protocol = absoluteUrl.startsWith('https') ? https : http;
             const file = fs.createWriteStream(destPath);
             protocol
-                .get(url, (response) => {
+                .get(absoluteUrl, (response) => {
                 if (response.statusCode === 302 || response.statusCode === 301) {
                     const redirect = response.headers.location;
                     if (redirect) {
                         file.close();
                         fs.unlinkSync(destPath);
-                        this.downloadFile(redirect, destPath).then(resolve).catch(reject);
+                        const nextUrl = this.resolveRedirectUrl(redirect, absoluteUrl);
+                        this.downloadFile(nextUrl, destPath).then(resolve).catch(reject);
                         return;
                     }
                 }
@@ -257,6 +383,7 @@ exports.VideoProcessingService = VideoProcessingService = __decorate([
         chapter_repository_1.ChapterRepository,
         module_repository_1.ModuleRepository,
         config_1.ConfigService,
-        logger_service_1.LoggerService])
+        logger_service_1.LoggerService,
+        s3_storage_service_1.S3StorageService])
 ], VideoProcessingService);
 //# sourceMappingURL=video-processing.service.js.map

@@ -12,6 +12,10 @@ import { ChapterRepository } from '../chapters/repositories/chapter.repository';
 import { ModuleRepository } from '../modules/repositories/module.repository';
 import { LoggerService } from '../common/services/logger.service';
 import { VIDEO_PROCESSING_STATUS } from './schemas/video-processing.schema';
+import { S3StorageService } from '../files/s3-storage.service';
+import { resolveHlsOutputRoot, resolveLocalUploadsRoot } from '../common/utils/local-media-paths';
+import { ensureAbsoluteHttpUrl, normalizePublicBaseUrl } from '../common/utils/url-normalize';
+import { resolvePublicFileStorageBaseUrl } from '../common/utils/storage-public-base-url';
 
 @Injectable()
 export class VideoProcessingService {
@@ -22,6 +26,7 @@ export class VideoProcessingService {
     private readonly moduleRepository: ModuleRepository,
     private readonly configService: ConfigService,
     private readonly logger: LoggerService,
+    private readonly s3Storage: S3StorageService,
   ) {
     this.logger.setContext('VideoProcessingService');
   }
@@ -109,6 +114,16 @@ export class VideoProcessingService {
       await this.resolveSourceVideoToTemp(fileInfo.key, sourceUrl, tempFile);
       await this.runFfmpegHls(tempFile, outputDir);
       const masterUrl = this.resolveMasterPlaylistUrl(videoProcessingId);
+      if (this.shouldPublishHlsToS3()) {
+        await this.uploadHlsArtifactsToS3(videoProcessingId, outputDir);
+        if (this.shouldDeleteLocalHlsAfterS3()) {
+          try {
+            fs.rmSync(outputDir, { recursive: true, force: true });
+          } catch (rmErr: any) {
+            this.logger.warn(`Could not remove local HLS dir ${outputDir}: ${rmErr?.message}`);
+          }
+        }
+      }
       await this.videoProcessingRepo.updateStatus(videoProcessingId, VIDEO_PROCESSING_STATUS.COMPLETED, {
         masterPlaylistUrl: masterUrl,
       });
@@ -152,29 +167,99 @@ export class VideoProcessingService {
   }
 
   private getOutputDir(videoProcessingId: string): string {
-    const base =
-      this.configService.get<string>('VIDEO_HLS_OUTPUT_DIR') || path.join(process.cwd(), 'storage', 'hls');
+    const base = resolveHlsOutputRoot(this.configService.get<string>('VIDEO_HLS_OUTPUT_DIR'));
     return path.join(base, videoProcessingId);
   }
 
-  /** Base URL where clients fetch /hls/... (API origin, CloudFront, etc.) */
+  /**
+   * When S3 is enabled, HLS objects are uploaded under `{HLS_S3_KEY_PREFIX}/{videoProcessingId}/`
+   * and the master URL uses FILE_BASE_URL (or S3 virtual host) unless HLS_S3_PUBLIC_BASE_URL is set.
+   * Local-only mode: serve from this API at /hls/... using HLS_PUBLIC_BASE_URL or PUBLIC_APP_URL.
+   */
   private resolveMasterPlaylistUrl(videoProcessingId: string): string {
+    if (this.shouldPublishHlsToS3()) {
+      const explicit = (this.configService.get<string>('HLS_S3_PUBLIC_BASE_URL') ?? '').trim();
+      const baseRaw =
+        explicit && !/storage\.example\.com/i.test(explicit)
+          ? normalizePublicBaseUrl(explicit)
+          : resolvePublicFileStorageBaseUrl(
+              (k) => this.configService.get(k),
+              true,
+              this.s3Storage.getBucket(),
+            );
+      const base = baseRaw.replace(/\/$/, '');
+      const prefix = this.getHlsS3KeyPrefix();
+      return `${base}/${prefix}/${videoProcessingId}/master.m3u8`;
+    }
     const explicit =
       (this.configService.get<string>('HLS_PUBLIC_BASE_URL') ?? '').trim() ||
-      (this.configService.get<string>('PUBLIC_APP_URL') ?? '').trim() ||
-      (this.configService.get<string>('FILE_BASE_URL') ?? '').trim();
+      (this.configService.get<string>('PUBLIC_APP_URL') ?? '').trim();
     const fb = explicit && !/storage\.example\.com/i.test(explicit) ? explicit : '';
     const port = this.configService.get<number>('PORT') || 3000;
-    const baseUrl = fb || `http://localhost:${port}`;
+    const baseUrl = fb ? normalizePublicBaseUrl(fb) : `http://localhost:${port}`;
     const base = baseUrl.replace(/\/$/, '');
     return `${base}/hls/${videoProcessingId}/master.m3u8`;
   }
 
-  /** Prefer on-disk file under storage/uploads (direct upload); otherwise HTTP(S) from imgUrl. */
+  /** Upload transcoded HLS to the same S3 bucket as uploads (unless disabled). */
+  private shouldPublishHlsToS3(): boolean {
+    if (!this.s3Storage.isEnabled()) return false;
+    const v = (this.configService.get<string>('HLS_UPLOAD_TO_S3') ?? '').trim().toLowerCase();
+    return v !== 'false' && v !== '0' && v !== 'no';
+  }
+
+  private shouldDeleteLocalHlsAfterS3(): boolean {
+    const v = (this.configService.get<string>('HLS_DELETE_LOCAL_AFTER_S3_UPLOAD') ?? '').trim().toLowerCase();
+    return v !== 'false' && v !== '0' && v !== 'no';
+  }
+
+  private getHlsS3KeyPrefix(): string {
+    const p = (this.configService.get<string>('HLS_S3_KEY_PREFIX') ?? 'hls')
+      .trim()
+      .replace(/^\/+|\/+$/g, '');
+    return p || 'hls';
+  }
+
+  private contentTypeForHlsFile(fileName: string): string {
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith('.m3u8')) return 'application/vnd.apple.mpegurl';
+    if (lower.endsWith('.ts')) return 'video/mp2t';
+    return 'application/octet-stream';
+  }
+
+  private cacheControlForHlsFile(fileName: string): string {
+    return fileName.toLowerCase().endsWith('.m3u8')
+      ? 'public, max-age=5'
+      : 'public, max-age=31536000, immutable';
+  }
+
+  private async uploadHlsArtifactsToS3(videoProcessingId: string, outputDir: string): Promise<void> {
+    const prefix = this.getHlsS3KeyPrefix();
+    const entries = fs.readdirSync(outputDir, { withFileTypes: true });
+    const files = entries.filter((e) => e.isFile()).map((e) => e.name);
+    if (files.length === 0) {
+      throw new Error('No HLS output files to upload');
+    }
+    const sorted = files.sort((a, b) => {
+      if (a === 'master.m3u8') return 1;
+      if (b === 'master.m3u8') return -1;
+      return a.localeCompare(b);
+    });
+    for (const name of sorted) {
+      const full = path.join(outputDir, name);
+      const key = `${prefix}/${videoProcessingId}/${name}`;
+      const contentType = this.contentTypeForHlsFile(name);
+      const cacheControl = this.cacheControlForHlsFile(name);
+      await this.s3Storage.uploadLocalFile(key, full, contentType, cacheControl);
+    }
+    this.logger.log(
+      `HLS uploaded: s3://${this.s3Storage.getBucket()}/${prefix}/${videoProcessingId}/ (${sorted.length} files)`,
+    );
+  }
+
+  /** Prefer on-disk file under local uploads root (direct upload); otherwise HTTP(S) from imgUrl. */
   private async resolveSourceVideoToTemp(fileKey: string, sourceUrl: string, tempFile: string): Promise<void> {
-    const uploadsRoot =
-      this.configService.get<string>('LOCAL_UPLOADS_ROOT')?.trim() ||
-      path.join(process.cwd(), 'storage', 'uploads');
+    const uploadsRoot = resolveLocalUploadsRoot(this.configService.get<string>('LOCAL_UPLOADS_ROOT'));
     const safeParts = fileKey
       .replace(/^\/+/, '')
       .split(/[/\\]+/)
@@ -185,21 +270,78 @@ export class VideoProcessingService {
       this.logger.log(`Transcode source: local file ${localPath}`);
       return;
     }
+    if (this.s3Storage.isEnabled()) {
+      try {
+        await this.s3Storage.getObjectToFile(fileKey, tempFile);
+        this.logger.log(`Transcode source: S3 GetObject ${fileKey}`);
+        return;
+      } catch (err: any) {
+        this.logger.warn(
+          `S3 GetObject failed for key "${fileKey}", falling back to HTTP download: ${err?.message}`,
+        );
+      }
+    }
     await this.downloadFile(sourceUrl, tempFile);
   }
 
+  /**
+   * Node http(s).get requires an absolute URL. DB rows may store relative paths if baseUrl was wrong.
+   */
+  private resolveAbsoluteUrlForDownload(raw: string): string {
+    const s = (raw ?? '').trim();
+    if (!s) {
+      throw new Error(
+        'Source video URL is empty — ensure FileInfo has a valid baseUrl/imgUrl (e.g. set FILE_BASE_URL or use S3 public URL).',
+      );
+    }
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(s) && !s.startsWith('/')) {
+      try {
+        return ensureAbsoluteHttpUrl(s);
+      } catch {
+        /* fall through */
+      }
+    }
+    try {
+      return new URL(s).href;
+    } catch {
+      const port = this.configService.get<number>('PORT') || 3000;
+      const appBase =
+        (this.configService.get<string>('PUBLIC_APP_URL') ?? '').trim() ||
+        (this.configService.get<string>('HLS_PUBLIC_BASE_URL') ?? '').trim() ||
+        `http://localhost:${port}`;
+      const origin = appBase.replace(/\/$/, '');
+      const pathPart = s.startsWith('/') ? s : `/${s}`;
+      try {
+        return new URL(pathPart, `${origin}/`).href;
+      } catch {
+        throw new Error(`Invalid source URL: ${s.slice(0, 200)}`);
+      }
+    }
+  }
+
+  private resolveRedirectUrl(location: string, currentUrl: string): string {
+    const loc = (location ?? '').trim();
+    try {
+      return new URL(loc).href;
+    } catch {
+      return new URL(loc, currentUrl).href;
+    }
+  }
+
   private downloadFile(url: string, destPath: string): Promise<void> {
+    const absoluteUrl = this.resolveAbsoluteUrlForDownload(url);
     return new Promise((resolve, reject) => {
-      const protocol = url.startsWith('https') ? https : http;
+      const protocol = absoluteUrl.startsWith('https') ? https : http;
       const file = fs.createWriteStream(destPath);
       protocol
-        .get(url, (response) => {
+        .get(absoluteUrl, (response) => {
           if (response.statusCode === 302 || response.statusCode === 301) {
             const redirect = response.headers.location;
             if (redirect) {
               file.close();
               fs.unlinkSync(destPath);
-              this.downloadFile(redirect, destPath).then(resolve).catch(reject);
+              const nextUrl = this.resolveRedirectUrl(redirect, absoluteUrl);
+              this.downloadFile(nextUrl, destPath).then(resolve).catch(reject);
               return;
             }
           }
